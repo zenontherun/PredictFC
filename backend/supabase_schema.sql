@@ -209,30 +209,68 @@ create policy "Users can update own predictions" on public.predictions for updat
 -- SAMPLE MATCH DATA
 -- ============================================
 
+-- ============================================
+-- 6. SAMPLE MATCH DATA (UPDATED FROM SCREENSHOTS)
+-- ============================================
+
+-- ============================================
+-- 6. FULL OFFICIAL FIFA WORLD CUP 2026 SCHEDULE (GROUP STAGE)
+-- ============================================
+
 insert into public.matches (home_team, away_team, home_flag, away_flag, match_date, match_time, group_name, venue) values
--- Group A
-('Mexico',       'South Korea',  '🇲🇽', '🇰🇷', '2026-06-11', '14:00', 'A', 'Estadio Azteca'),
-('South Africa', 'Czechia',      '🇿🇦', '🇨🇿', '2026-06-11', '18:00', 'A', 'Estadio BBVA'),
--- Group B
-('Canada',       'Switzerland',  '🇨🇦', '🇨🇭', '2026-06-12', '12:00', 'B', 'BMO Field'),
-('Qatar',        'Bosnia',       '🇶🇦', '🇧🇦', '2026-06-12', '16:00', 'B', 'BC Place'),
--- Group C
-('Brazil',       'Morocco',      '🇧🇷', '🇲🇦', '2026-06-13', '13:00', 'C', 'Gillette Stadium'),
--- Group D
-('USA',          'Australia',    '🇺🇸', '🇦🇺', '2026-06-12', '19:00', 'D', 'SoFi Stadium'),
--- Group E
-('Germany',      'Ecuador',      '🇩🇪', '🇪🇨', '2026-06-14', '14:00', 'E', 'NRG Stadium'),
--- Group F
-('Netherlands',  'Japan',        '🇳🇱', '🇯🇵', '2026-06-15', '15:00', 'F', 'Lumen Field'),
--- Group G
-('Belgium',      'Iran',         '🇧🇪', '🇮🇷', '2026-06-16', '12:00', 'G', 'Mercedes-Benz Stadium'),
--- Group H
-('Spain',        'Uruguay',      '🇪🇸', '🇺🇾', '2026-06-16', '17:00', 'H', 'Hard Rock Stadium'),
--- Group I
-('France',       'Senegal',      '🇫🇷', '🇸🇳', '2026-06-17', '13:00', 'I', 'MetLife Stadium'),
--- Group J
-('Argentina',    'Austria',      '🇦🇷', '🇦🇹', '2026-06-18', '14:00', 'J', 'AT&T Stadium'),
--- Group K
-('Portugal',     'Colombia',     '🇵🇹', '🇨🇴', '2026-06-19', '15:00', 'K', 'Levi''s Stadium'),
--- Group L
-('England',      'Croatia',      '🏴󠁧󠁢󠁥󠁮󠁧󠁿', '🇭🇷', '2026-06-20', '16:00', 'L', 'Lincoln Financial Field');
+-- June 12
+('Mexico', 'South Africa', '🇲🇽', '🇿🇦', '2026-06-11', '19:00', 'A', 'Mexico City Stadium'),
+('Korea Republic', 'Czechia', '🇰🇷', '🇨🇿', '2026-06-12', '02:00', 'A', 'Guadalajara Stadium'),
+-- June 13
+('Canada', 'Bosnia-Herzegovina', '🇨🇦', '🇧🇦', '2026-06-12', '19:00', 'B', 'Toronto Stadium'),
+('USA', 'Paraguay', '🇺🇸', '🇵🇾', '2026-06-13', '01:00', 'D', 'Los Angeles Stadium'),
+-- June 14
+('Qatar', 'Switzerland', '🇶🇦', '🇨🇭', '2026-06-13', '19:00', 'B', 'San Francisco Bay Area Stadium'),
+('Brazil', 'Morocco', '🇧🇷', '🇲🇦', '2026-06-13', '22:00', 'C', 'New York/New Jersey Stadium'),
+('Haiti', 'Scotland', '🇭🇹', '🏴󠁧󠁢󠁳󠁣󠁴󠁿', '2026-06-14', '01:00', 'C', 'Miami Stadium'),
+('Australia', 'Türkiye', '🇦🇺', '🇹🇷', '2026-06-14', '02:00', 'D', 'Houston Stadium'),
+('Germany', 'Curaçao', '🇩🇪', '🇨🇼', '2026-06-14', '17:00', 'E', 'Seattle Stadium'),
+-- June 15
+('Netherlands', 'Japan', '🇳🇱', '🇯🇵', '2026-06-14', '20:00', 'F', 'Dallas Stadium'),
+('Côte d''Ivoire', 'Ecuador', '🇨🇮', '🇪🇨', '2026-06-14', '23:00', 'E', 'Philadelphia Stadium'),
+('Sweden', 'Tunisia', '🇸🇪', '🇹🇳', '2026-06-15', '02:00', 'F', 'Monterrey Stadium'),
+('Spain', 'Cabo Verde', '🇪🇸', '🇨🇻', '2026-06-15', '16:00', 'H', 'Atlanta Stadium'),
+-- June 16
+('Belgium', 'Egypt', '🇧🇪', '🇪🇬', '2026-06-15', '19:00', 'G', 'Seattle Stadium'),
+('Saudi Arabia', 'Uruguay', '🇸🇦', '🇺🇾', '2026-06-15', '22:00', 'H', 'San Francisco Bay Area Stadium'),
+('IR Iran', 'New Zealand', '🇮🇷', '🇳🇿', '2026-06-16', '01:00', 'G', 'Los Angeles Stadium'),
+('France', 'Norway', '🇫🇷', '🇳🇴', '2026-06-16', '16:00', 'I', 'Boston Stadium'),
+-- June 17
+('Senegal', 'Iraq', '🇸🇳', '🇮🇶', '2026-06-16', '19:00', 'I', 'New York/New Jersey Stadium'),
+('Argentina', 'Algeria', '🇦🇷', '🇩🇿', '2026-06-16', '22:00', 'J', 'Kansas City Stadium'),
+('Austria', 'Jordan', '🇦🇹', '🇯🇴', '2026-06-17', '01:00', 'J', 'San Francisco Bay Area Stadium'),
+('Portugal', 'Congo DR', '🇵🇹', '🇨🇩', '2026-06-17', '16:00', 'K', 'Houston Stadium'),
+-- June 18
+('Colombia', 'Uzbekistan', '🇨🇴', '🇺🇿', '2026-06-17', '19:00', 'K', 'Atlanta Stadium'),
+('Brazil', 'Panama', '🇧🇷', '🇵🇦', '2026-06-17', '22:00', 'L', 'New York/New Jersey Stadium'),
+('Morocco', 'Ghana', '🇲🇦', '🇬🇭', '2026-06-18', '01:00', 'L', 'Miami Stadium'),
+('Czechia', 'South Africa', '🇨🇿', '🇿🇦', '2026-06-18', '16:00', 'A', 'Atlanta Stadium'),
+-- June 19
+('Mexico', 'Korea Republic', '🇲🇽', '🇰🇷', '2026-06-18', '19:00', 'A', 'Guadalajara Stadium'),
+('Canada', 'Qatar', '🇨🇦', '🇶🇦', '2026-06-18', '22:00', 'B', 'BC Place Vancouver'),
+('Switzerland', 'Bosnia-Herzegovina', '🇨🇭', '🇧🇦', '2026-06-19', '01:00', 'B', 'Los Angeles Stadium'),
+('USA', 'Australia', '🇺🇸', '🇦🇺', '2026-06-19', '16:00', 'D', 'Seattle Stadium'),
+-- June 20
+('Türkiye', 'Paraguay', '🇹🇷', '🇵🇾', '2026-06-19', '19:00', 'D', 'San Francisco Bay Area Stadium'),
+('Haiti', 'Brazil', '🇭🇹', '🇧🇷', '2026-06-19', '22:00', 'C', 'Philadelphia Stadium'),
+('Morocco', 'Scotland', '🇲🇦', '🏴󠁧󠁢󠁳󠁣󠁴󠁿', '2026-06-20', '01:00', 'C', 'Houston Stadium'),
+('Germany', 'Ecuador', '🇩🇪', '🇪🇨', '2026-06-20', '16:00', 'E', 'Toronto Stadium'),
+-- June 21
+('Curaçao', 'Côte d''Ivoire', '🇨🇼', '🇨🇮', '2026-06-20', '19:00', 'E', 'Kansas City Stadium'),
+('Netherlands', 'Sweden', '🇳🇱', '🇸🇪', '2026-06-20', '22:00', 'F', 'Houston Stadium'),
+('Tunisia', 'Japan', '🇹🇳', '🇯🇵', '2026-06-21', '01:00', 'F', 'Monterrey Stadium'),
+('Spain', 'Saudi Arabia', '🇪🇸', '🇸🇦', '2026-06-21', '16:00', 'H', 'Atlanta Stadium'),
+-- June 22
+('Belgium', 'IR Iran', '🇧🇪', '🇮🇷', '2026-06-21', '19:00', 'G', 'Los Angeles Stadium'),
+('Uruguay', 'Cabo Verde', '🇺🇾', '🇨🇻', '2026-06-21', '22:00', 'H', 'Miami Stadium'),
+('New Zealand', 'Egypt', '🇳🇿', '🇪🇬', '2026-06-22', '01:00', 'G', 'BC Place Vancouver'),
+('Argentina', 'Austria', '🇦🇷', '🇦🇹', '2026-06-22', '17:00', 'J', 'Dallas Stadium'),
+-- June 24
+('France', 'Iraq', '🇫🇷', '🇮🇶', '2026-06-23', '21:00', 'I', 'Philadelphia Stadium'),
+('Norway', 'Senegal', '🇳🇴', '🇸🇳', '2026-06-24', '00:00', 'I', 'New York/New Jersey Stadium'),
+('Algeria', 'Jordan', '🇩🇿', '🇯🇴', '2026-06-24', '03:00', 'J', 'Seattle Stadium');

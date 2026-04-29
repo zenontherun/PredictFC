@@ -306,6 +306,49 @@ function AuthScreen() {
 }
 
 // ─── Helpers ────────────────────────────────
+function calculateGroupStandings(matches) {
+  const groups = {};
+
+  matches.forEach(m => {
+    if (!m.group_name || m.stage !== 'group') return;
+    if (!groups[m.group_name]) groups[m.group_name] = {};
+
+    const initTeam = (team, flag) => {
+      if (!groups[m.group_name][team]) {
+        groups[m.group_name][team] = { name: team, flag, pld: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, gd: 0, pts: 0 };
+      }
+    };
+
+    initTeam(m.home_team, m.home_flag);
+    initTeam(m.away_team, m.away_flag);
+
+    if (m.result_home !== null && m.result_away !== null) {
+      const h = groups[m.group_name][m.home_team];
+      const a = groups[m.group_name][m.away_team];
+
+      h.pld++; a.pld++;
+      h.gf += m.result_home; h.ga += m.result_away;
+      a.gf += m.result_away; a.ga += m.result_home;
+
+      if (m.result_home > m.result_away) { h.w++; h.pts += 3; a.l++; }
+      else if (m.result_home < m.result_away) { a.w++; a.pts += 3; h.l++; }
+      else { h.d++; a.d++; h.pts += 1; a.pts += 1; }
+      
+      h.gd = h.gf - h.ga;
+      a.gd = a.gf - a.ga;
+    }
+  });
+
+  return Object.keys(groups).sort().reduce((acc, gn) => {
+    acc[gn] = Object.values(groups[gn]).sort((a, b) => {
+      if (b.pts !== a.pts) return b.pts - a.pts;
+      if (b.gd !== a.gd) return b.gd - a.gd;
+      return b.gf - a.gf;
+    });
+    return acc;
+  }, {});
+}
+
 function calcPoints(pred, result) {
   if (!pred || !result) return null;
   const ph = parseInt(pred.predicted_home ?? pred.home);
@@ -320,6 +363,41 @@ function calcPoints(pred, result) {
   return { pts: 0, label: "Incorrect", color: "#ff6b6b" };
 }
 
+function getFlagUrl(countryName) {
+  const codes = {
+    'Mexico': 'mx', 'South Africa': 'za', 'Korea Republic': 'kr', 'Czechia': 'cz',
+    'Canada': 'ca', 'Bosnia-Herzegovina': 'ba', 'USA': 'us', 'Paraguay': 'py',
+    'Qatar': 'qa', 'Switzerland': 'ch', 'Brazil': 'br', 'Morocco': 'ma',
+    'Haiti': 'ht', 'Scotland': 'gb-sct', 'Australia': 'au', 'Türkiye': 'tr',
+    'Germany': 'de', 'Curaçao': 'cw', 'Netherlands': 'nl', 'Japan': 'jp',
+    'Côte d\'Ivoire': 'ci', 'Ecuador': 'ec', 'Sweden': 'se', 'Tunisia': 'tn',
+    'Spain': 'es', 'Cabo Verde': 'cv', 'Belgium': 'be', 'Egypt': 'eg',
+    'Saudi Arabia': 'sa', 'Uruguay': 'uy', 'IR Iran': 'ir', 'New Zealand': 'nz',
+    'England': 'gb-eng', 'Croatia': 'hr', 'Portugal': 'pt', 'Colombia': 'co',
+    'Argentina': 'ar', 'Austria': 'at', 'France': 'fr', 'Senegal': 'sn',
+    'Norway': 'no', 'Iraq': 'iq', 'Algeria': 'dz', 'Jordan': 'jo', 'Congo DR': 'cd',
+    'Uzbekistan': 'uz', 'Panama': 'pa', 'Ghana': 'gh', 'Oman': 'om'
+  };
+  const code = codes[countryName] || 'un';
+  return `https://flagcdn.com/w80/${code.toLowerCase()}.png`;
+}
+
+function formatMatchTimes(dateStr, timeStr) {
+  if (!dateStr || !timeStr) return { npt: "TBD", utc: "TBD", date: "TBD" };
+  
+  const cleanTime = timeStr.includes(':') ? timeStr.split(':').slice(0, 2).join(':') : '00:00';
+  const isoStr = `${dateStr}T${cleanTime}:00Z`;
+  const date = new Date(isoStr);
+
+  if (isNaN(date.getTime())) return { npt: "TBD", utc: "TBD", date: "TBD" };
+
+  return {
+    npt: date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "Asia/Kathmandu" }),
+    utc: date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true, timeZone: "UTC" }),
+    date: date.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "Asia/Kathmandu" })
+  };
+}
+
 // ─── Main App ───────────────────────────────
 export default function App() {
   const [tab, setTab] = useState("predict");
@@ -330,6 +408,9 @@ export default function App() {
   const [leaderboard, setLeaderboard] = useState([]);
   const [saving, setSaving] = useState({});
   const [toast, setToast] = useState(null);
+  const [showAllMatches, setShowAllMatches] = useState(false);
+  const [search, setSearch] = useState("");
+  const [selectedMatch, setSelectedMatch] = useState(null);
 
   const showToast = (msg, type = "success") => {
     setToast({ msg, type });
@@ -433,6 +514,10 @@ export default function App() {
         .toast.error { background: #2a0d0d; border: 1px solid #ff6b6b; color: #ff6b6b; }
         @keyframes slideUp { from { opacity: 0; transform: translateX(-50%) translateY(10px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+        .score-input-sm { width: 36px; height: 36px; background: #061020; border: 1.5px solid #1a2e48; border-radius: 6px; color: #fff; font-family: 'Barlow Condensed', sans-serif; font-size: 18px; font-weight: 800; text-align: center; outline: none; transition: border-color 0.2s; }
+        .score-input-sm:focus { border-color: #c8a84b; }
+        .lock-btn-sm { margin-top: 4px; width: 100%; padding: 4px; background: #c8a84b; color: #060d1a; border: none; border-radius: 4px; font-family: 'Barlow Condensed', sans-serif; font-size: 10px; font-weight: 900; cursor: pointer; }
+        .match-card-hover:hover { border-color: #c8a84b55 !important; transform: scale(1.01); z-index: 10; }
       `}</style>
 
       <div style={{ position: "fixed", inset: 0, pointerEvents: "none", background: "radial-gradient(ellipse 60% 40% at 20% 10%, #1a3a6a22 0%, transparent 60%), radial-gradient(ellipse 50% 40% at 80% 80%, #1a4a1a22 0%, transparent 60%)" }} />
@@ -467,8 +552,8 @@ export default function App() {
         </div>
 
         {/* Tabs */}
-        <div style={{ display: "flex", borderBottom: "1px solid #1a2e48", marginBottom: 24, gap: 4 }}>
-          {[{ id: "predict", label: "🎯 Predict" }, { id: "leaderboard", label: "🏆 Leaderboard" }, { id: "scoring", label: "📋 Scoring" }]
+        <div style={{ display: "flex", borderBottom: "1px solid #1a2e48", marginBottom: 24, gap: 4, overflowX: "auto", whiteSpace: "nowrap", scrollbarWidth: "none" }}>
+          {[{ id: "predict", label: "🎯 Predict" }, { id: "groups", label: "🏁 Groups" }, { id: "leaderboard", label: "🏆 Leaderboard" }, { id: "scoring", label: "📋 Scoring" }]
             .concat(user?.role === "superAdmin" ? [{ id: "admin", label: "⚙️ Admin" }] : [])
             .map(t => (
               <button key={t.id} className={`tab-btn ${tab === t.id ? "active" : ""}`} onClick={() => setTab(t.id)}>{t.label}</button>
@@ -477,69 +562,180 @@ export default function App() {
 
         {/* ── PREDICT TAB ── */}
         {tab === "predict" && (
-          <div>
-            {matches.length === 0 && <p style={{ color: "#4a6a8a", textAlign: "center", padding: 40 }}>Loading matches...</p>}
-            {matches.map(match => {
-              const pred = predictions[match.id] || {};
-              const isLocked = pred.locked || match.is_locked;
-              const hasResult = match.result_home !== null && match.result_away !== null;
-              const pts = hasResult && pred.predicted_home !== undefined ? calcPoints(pred, match) : null;
-              return (
-                <div key={match.id} className={`match-card ${isLocked ? "locked" : ""}`}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16, alignItems: "center" }}>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <span style={{ background: "#061020", border: "1px solid #1a2e48", borderRadius: 6, padding: "3px 10px", fontSize: 11, color: "#4a6a8a", fontFamily: "Barlow Condensed", fontWeight: 700, textTransform: "uppercase" }}>Group {match.group_name}</span>
-                      <span style={{ background: "#061020", border: "1px solid #1a2e48", borderRadius: 6, padding: "3px 10px", fontSize: 11, color: "#4a6a8a" }}>
-                        {new Date(match.match_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })} · {match.match_time?.slice(0, 5)}
-                      </span>
-                    </div>
-                    {pts && (
-                      <span style={{ padding: "4px 12px", borderRadius: 20, background: pts.color + "22", border: `1px solid ${pts.color}55`, color: pts.color, fontSize: 13, fontFamily: "Barlow Condensed", fontWeight: 700 }}>
-                        +{pts.pts}pts {pts.label}
-                      </span>
-                    )}
-                    {isLocked && !pts && <span style={{ padding: "6px 14px", background: "#0d2a1a", border: "1px solid #1a5a2a", borderRadius: 8, color: "#00ff87", fontSize: 12, fontFamily: "Barlow Condensed", fontWeight: 700 }}>🔒 LOCKED</span>}
+          <div style={{ maxWidth: 1000, margin: "0 auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 16 }}>
+              <h2 style={{ fontFamily: "Barlow Condensed", fontSize: 32, fontStyle: "italic", fontWeight: 800 }}>Matches</h2>
+              
+              <div style={{ display: "flex", gap: 12, flex: 1, minWidth: 300, justifyContent: "flex-end" }}>
+                <input 
+                  type="text" 
+                  placeholder="Search team or stadium..." 
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  style={{ background: "#061020", border: "1px solid #1a2e48", borderRadius: 8, padding: "8px 16px", color: "#fff", flex: 1, maxWidth: 300, outline: "none", fontSize: 14 }}
+                />
+                <button 
+                  onClick={() => setShowAllMatches(!showAllMatches)}
+                  style={{ background: "transparent", border: "1px solid #1a2e48", borderRadius: 8, color: "#c8a84b", fontSize: 11, fontWeight: 800, padding: "6px 12px", cursor: "pointer", fontFamily: "Barlow Condensed" }}
+                >
+                  {showAllMatches ? "SHOW UPCOMING ONLY" : "VIEW FULL SCHEDULE"}
+                </button>
+              </div>
+            </div>
+
+            {(() => {
+              const upcoming = matches
+                .filter(m => m.result_home === null)
+                .sort((a, b) => new Date(`${a.match_date}T${a.match_time}`) - new Date(`${b.match_date}T${b.match_time}`));
+              
+              const filtered = (showAllMatches ? matches : upcoming).filter(m => 
+                m.home_team.toLowerCase().includes(search.toLowerCase()) ||
+                m.away_team.toLowerCase().includes(search.toLowerCase()) ||
+                m.venue.toLowerCase().includes(search.toLowerCase())
+              );
+
+              // Group by date (converted to Nepal Time)
+              const groups = {};
+              filtered.forEach(m => {
+                const nTime = formatMatchTimes(m.match_date, m.match_time);
+                const header = `${m.stage === 'group' ? 'Group Stage' : 'Knockout Stage'} · ${nTime.date}`;
+                if (!groups[header]) groups[header] = [];
+                groups[header].push({ ...m, nTime });
+              });
+
+              if (filtered.length === 0) return <p style={{ color: "#4a6a8a", textAlign: "center", padding: 40 }}>No matches found.</p>;
+              
+              return Object.entries(groups).map(([header, matchGroup]) => (
+                <div key={header} style={{ marginBottom: 32 }}>
+                  <div style={{ background: "#1a2e48", padding: "10px 20px", borderRadius: "8px 8px 0 0", fontFamily: "Barlow Condensed", fontSize: 18, fontWeight: 700, color: "#8ab0d0", marginBottom: 16 }}>
+                    {header}
                   </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(450px, 1fr))", gap: 16 }}>
+                    {matchGroup.map(match => {
+                      const pred = predictions[match.id] || {};
+                      const isLocked = pred.locked || match.is_locked;
+                      const hasResult = match.result_home !== null && match.result_away !== null;
+                      const pts = hasResult && pred.predicted_home !== undefined ? calcPoints(pred, match) : null;
+                      
+                      return (
+                        <div key={match.id} onClick={() => setSelectedMatch(match)} style={{ background: "#0d1e35", border: "1px solid #1a2e48", borderRadius: 12, padding: "16px 20px", position: "relative", transition: "transform 0.2s", cursor: "pointer" }} className="match-card-hover">
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
+                            <div style={{ fontSize: 11, color: "#4a6a8a", fontWeight: 800, textTransform: "uppercase", letterSpacing: 1 }}>Group {match.group_name}</div>
+                            <div style={{ textAlign: "right" }}>
+                              <div style={{ fontSize: 13, fontWeight: 800, color: "#fff" }}>
+                                {match.nTime.npt} <span style={{ color: "#4a6a8a", fontWeight: 500, fontSize: 11 }}>NPT</span>
+                              </div>
+                              <div style={{ fontSize: 10, color: "#4a6a8a", fontWeight: 700 }}>
+                                {match.nTime.utc} <span style={{ fontWeight: 500 }}>UTC</span>
+                              </div>
+                            </div>
+                          </div>
 
-                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <div style={{ flex: 1, textAlign: "right" }}>
-                      <div style={{ fontSize: 28, marginBottom: 4 }}>{match.home_flag}</div>
-                      <div style={{ fontFamily: "Barlow Condensed", fontWeight: 700, fontSize: 16 }}>{match.home_team}</div>
-                      <div style={{ fontSize: 11, color: "#4a6a8a", marginTop: 2 }}>HOME</div>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-                      <input type="number" min="0" max="99" className="score-input" value={pred.predicted_home ?? ""} disabled={isLocked} onChange={e => handleInput(match.id, "home", e.target.value)} placeholder="0" />
-                      <span style={{ fontFamily: "Barlow Condensed", fontSize: 22, fontWeight: 800, color: "#2a4060" }}>:</span>
-                      <input type="number" min="0" max="99" className="score-input" value={pred.predicted_away ?? ""} disabled={isLocked} onChange={e => handleInput(match.id, "away", e.target.value)} placeholder="0" />
-                    </div>
-                    <div style={{ flex: 1, textAlign: "left" }}>
-                      <div style={{ fontSize: 28, marginBottom: 4 }}>{match.away_flag}</div>
-                      <div style={{ fontFamily: "Barlow Condensed", fontWeight: 700, fontSize: 16 }}>{match.away_team}</div>
-                      <div style={{ fontSize: 11, color: "#4a6a8a", marginTop: 2 }}>AWAY</div>
-                    </div>
-                  </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 14 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                                <img src={getFlagUrl(match.home_team)} alt="" style={{ width: 32, height: 22, borderRadius: 3, objectFit: "cover", border: "1px solid #1a2e48" }} />
+                                <span style={{ fontFamily: "Barlow Condensed", fontWeight: 700, fontSize: 18, color: "#fff" }}>{match.home_team}</span>
+                              </div>
+                              <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                                <img src={getFlagUrl(match.away_team)} alt="" style={{ width: 32, height: 22, borderRadius: 3, objectFit: "cover", border: "1px solid #1a2e48" }} />
+                                <span style={{ fontFamily: "Barlow Condensed", fontWeight: 700, fontSize: 18, color: "#fff" }}>{match.away_team}</span>
+                              </div>
+                            </div>
 
-                  {hasResult && (
-                    <div style={{ textAlign: "center", marginTop: 12, fontSize: 13, color: "#4a6a8a" }}>
-                      Final: {match.home_team} <strong style={{ color: "#fff" }}>{match.result_home} – {match.result_away}</strong> {match.away_team}
-                    </div>
-                  )}
+                            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, background: "#061020", padding: "10px", borderRadius: 10, border: "1px solid #1a2e48" }}>
+                              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                                <input type="number" className="score-input-sm" value={pred.predicted_home ?? ""} disabled={isLocked} onChange={e => handleInput(match.id, "home", e.target.value)} placeholder="0" />
+                                <span style={{ color: "#2a4060", fontWeight: 800 }}>:</span>
+                                <input type="number" className="score-input-sm" value={pred.predicted_away ?? ""} disabled={isLocked} onChange={e => handleInput(match.id, "away", e.target.value)} placeholder="0" />
+                              </div>
+                              {!isLocked ? (
+                                <button className="lock-btn-sm" onClick={() => handleLock(match.id)} disabled={saving[match.id]}>
+                                  {saving[match.id] ? "..." : "LOCK"}
+                                </button>
+                              ) : (
+                                <div style={{ fontSize: 9, color: "#00ff87", fontWeight: 900, marginTop: 4 }}>LOCKED</div>
+                              )}
+                            </div>
+                          </div>
 
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 16, paddingTop: 14, borderTop: "1px solid #1a2e48" }}>
-                    <span style={{ fontSize: 12, color: "#2a4060" }}>📍 {match.venue}</span>
-                    {!isLocked ? (
-                      <button className="submit-btn" disabled={saving[match.id]} onClick={() => handleLock(match.id)}>
-                        {saving[match.id] ? "Saving..." : "Lock Prediction"}
-                      </button>
-                    ) : (
-                      <div style={{ fontSize: 13, color: "#00ff87", fontWeight: 600 }}>
-                        Your pick: {pred.predicted_home} – {pred.predicted_away}
-                      </div>
-                    )}
+                          <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid #1a2e48", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <span style={{ fontSize: 10, color: "#4a6a8a", fontWeight: 700 }}>🏟️ {match.venue}</span>
+                            {pts && (
+                              <div style={{ padding: "4px 8px", background: pts.color + "11", border: `1px solid ${pts.color}33`, borderRadius: 6, color: pts.color, fontSize: 10, fontWeight: 800 }}>
+                                +{pts.pts} PTS
+                              </div>
+                            )}
+                          </div>
+                          
+                          {hasResult && !pts && (
+                            <div style={{ marginTop: 8, textAlign: "center", fontSize: 11, color: "#4a6a8a", fontWeight: 600 }}>
+                              FT: {match.result_home} - {match.result_away}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-              );
-            })}
+              ));
+            })()}
+          </div>
+        )}
+
+        {/* ── GROUPS TAB ── */}
+        {tab === "groups" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 32 }}>
+            {(() => {
+              const groupData = calculateGroupStandings(matches);
+              return Object.entries(groupData).map(([groupName, teams]) => (
+                <div key={groupName} style={{ background: "linear-gradient(135deg, #0d1e35 0%, #0a1628 100%)", border: "1px solid #1a2e48", borderRadius: 16, overflow: "hidden" }}>
+                  <div style={{ padding: "16px 20px", background: "#1a2e48", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <h3 style={{ fontFamily: "Barlow Condensed", fontSize: 24, fontWeight: 800, fontStyle: "italic", color: "#c8a84b", margin: 0 }}>GROUP {groupName}</h3>
+                    <div style={{ fontSize: 11, color: "#4a6a8a", fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>Official Standings</div>
+                  </div>
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: 13 }}>
+                      <thead>
+                        <tr style={{ color: "#4a6a8a", borderBottom: "1px solid #1a2e48" }}>
+                          <th style={{ padding: "12px 16px", fontWeight: 700 }}>POS</th>
+                          <th style={{ padding: "12px 16px", fontWeight: 700 }}>TEAM</th>
+                          <th style={{ padding: "12px 8px", textAlign: "center", fontWeight: 700 }}>PLD</th>
+                          <th style={{ padding: "12px 8px", textAlign: "center", fontWeight: 700 }}>GD</th>
+                          <th style={{ padding: "12px 16px", textAlign: "center", fontWeight: 700, color: "#c8a84b" }}>PTS</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {teams.map((team, idx) => (
+                          <tr key={team.name} style={{ borderBottom: idx === teams.length - 1 ? "none" : "1px solid #061020", background: idx < 2 ? "#00ff8705" : "transparent" }}>
+                            <td style={{ padding: "16px", fontWeight: 800, color: idx < 2 ? "#00ff87" : "#4a6a8a" }}>{idx + 1}</td>
+                            <td style={{ padding: "16px" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                <img src={getFlagUrl(team.name)} alt="" style={{ width: 24, height: 16, borderRadius: 2, objectFit: "cover", border: "1px solid #1a2e48" }} />
+                                <span style={{ fontWeight: 700, fontFamily: "Barlow Condensed", fontSize: 16 }}>{team.name}</span>
+                              </div>
+                            </td>
+                            <td style={{ padding: "16px 8px", textAlign: "center", color: "#fff", fontWeight: 600 }}>{team.pld}</td>
+                            <td style={{ padding: "16px 8px", textAlign: "center", color: team.gd > 0 ? "#00ff87" : team.gd < 0 ? "#ff6b6b" : "#4a6a8a", fontWeight: 600 }}>{team.gd > 0 ? `+${team.gd}` : team.gd}</td>
+                            <td style={{ padding: "16px", textAlign: "center" }}>
+                              <span style={{ display: "inline-block", background: "#c8a84b22", color: "#c8a84b", padding: "4px 10px", borderRadius: 6, fontWeight: 800, fontSize: 15, fontFamily: "Barlow Condensed" }}>{team.pts}</span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {teams.length > 0 && (
+                    <div style={{ padding: "10px 16px", background: "#06102033", borderTop: "1px solid #1a2e48", display: "flex", gap: 12 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <div style={{ width: 8, height: 8, borderRadius: 2, background: "#00ff87" }}></div>
+                        <span style={{ fontSize: 10, color: "#4a6a8a", textTransform: "uppercase", fontWeight: 700 }}>Promotion Zone</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ));
+            })()}
           </div>
         )}
 
@@ -653,6 +849,85 @@ export default function App() {
       </div>
 
       {toast && <div className={`toast ${toast.type}`}>{toast.msg}</div>}
+
+      {/* ── MATCH DETAILS MODAL ── */}
+      {selectedMatch && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", backdropFilter: "blur(8px)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ background: "#0d1e35", border: "1px solid #c8a84b", borderRadius: 24, maxWidth: 500, width: "100%", maxHeight: "90vh", overflowY: "auto", position: "relative", boxShadow: "0 0 40px rgba(200, 168, 75, 0.2)" }}>
+            <button onClick={(e) => { e.stopPropagation(); setSelectedMatch(null); }} style={{ position: "absolute", top: 20, right: 20, background: "transparent", border: "none", color: "#4a6a8a", fontSize: 24, cursor: "pointer", fontWeight: 800 }}>×</button>
+            
+            <div style={{ padding: "40px 30px" }} onClick={e => e.stopPropagation()}>
+              <div style={{ textAlign: "center", marginBottom: 30 }}>
+                <div style={{ fontSize: 13, color: "#c8a84b", fontWeight: 800, textTransform: "uppercase", letterSpacing: 2, marginBottom: 8 }}>Match Insights</div>
+                <div style={{ fontFamily: "Barlow Condensed", fontSize: 20, color: "#8ab0d0", fontWeight: 700 }}>{selectedMatch.venue}</div>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 40 }}>
+                <div style={{ flex: 1, textAlign: "center" }}>
+                  <img src={getFlagUrl(selectedMatch.home_team)} style={{ width: 64, height: 44, borderRadius: 6, marginBottom: 10, border: "2px solid #1a2e48" }} />
+                  <div style={{ fontFamily: "Barlow Condensed", fontSize: 22, fontWeight: 800 }}>{selectedMatch.home_team}</div>
+                </div>
+                <div style={{ fontFamily: "Barlow Condensed", fontSize: 32, fontWeight: 900, color: "#c8a84b", padding: "0 20px", fontStyle: "italic" }}>VS</div>
+                <div style={{ flex: 1, textAlign: "center" }}>
+                  <img src={getFlagUrl(selectedMatch.away_team)} style={{ width: 64, height: 44, borderRadius: 6, marginBottom: 10, border: "2px solid #1a2e48" }} />
+                  <div style={{ fontFamily: "Barlow Condensed", fontSize: 22, fontWeight: 800 }}>{selectedMatch.away_team}</div>
+                </div>
+              </div>
+
+              <div style={{ background: "#061020", borderRadius: 16, padding: 20, border: "1px solid #1a2e48" }}>
+                <h4 style={{ fontFamily: "Barlow Condensed", fontSize: 16, color: "#fff", marginBottom: 16, textTransform: "uppercase", letterSpacing: 1, borderBottom: "1px solid #1a2e48", paddingBottom: 10 }}>Last 5 Head-to-Head</h4>
+                
+                {(() => {
+                  const h2h = {
+                    'Mexico-South Africa': [
+                      { date: 'Jun 11, 2010', comp: 'World Cup', score: '1 - 1' },
+                      { date: 'Jul 08, 2005', comp: 'Gold Cup', score: '1 - 2' },
+                      { date: 'Jun 07, 2000', comp: 'US Cup', score: '4 - 2' },
+                      { date: 'Oct 06, 1993', comp: 'Friendly', score: '4 - 0' }
+                    ],
+                    'Korea Republic-Czechia': [
+                      { date: 'Jun 05, 2016', comp: 'Friendly', score: '2 - 1' },
+                      { date: 'Aug 15, 2001', comp: 'Friendly', score: '0 - 5' },
+                      { date: 'May 27, 1998', comp: 'Friendly', score: '2 - 2' }
+                    ],
+                    'Brazil-Morocco': [
+                      { date: 'Mar 25, 2023', comp: 'Friendly', score: '1 - 2' },
+                      { date: 'Jun 16, 1998', comp: 'World Cup', score: '3 - 0' },
+                      { date: 'Oct 09, 1997', comp: 'Friendly', score: '2 - 0' }
+                    ],
+                    'Spain-Uruguay': [
+                      { date: 'Jun 16, 2013', comp: 'Confed Cup', score: '2 - 1' },
+                      { date: 'Feb 06, 2013', comp: 'Friendly', score: '3 - 1' },
+                      { date: 'Aug 17, 2005', comp: 'Friendly', score: '2 - 0' }
+                    ]
+                  };
+                  const key = `${selectedMatch.home_team}-${selectedMatch.away_team}`;
+                  const keyRev = `${selectedMatch.away_team}-${selectedMatch.home_team}`;
+                  const data = h2h[key] || h2h[keyRev] || [];
+
+                  if (data.length === 0) return <div style={{ color: "#4a6a8a", fontSize: 13, textAlign: "center", padding: "20px 0" }}>Limited historical data available. These teams rarely meet on the world stage.</div>;
+
+                  return data.map((game, i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0", borderBottom: i === data.length -1 ? "none" : "1px solid #0d1e35" }}>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>{game.score}</div>
+                        <div style={{ fontSize: 11, color: "#4a6a8a" }}>{game.comp}</div>
+                      </div>
+                      <div style={{ fontSize: 11, color: "#8ab0d0", fontWeight: 600 }}>{game.date}</div>
+                    </div>
+                  ));
+                })()}
+              </div>
+
+              <div style={{ marginTop: 24, textAlign: "center" }}>
+                <button onClick={() => setSelectedMatch(null)} style={{ background: "linear-gradient(135deg, #c8a84b, #a8882b)", border: "none", borderRadius: 8, padding: "12px 30px", color: "#060d1a", fontFamily: "Barlow Condensed", fontSize: 14, fontWeight: 800, cursor: "pointer", width: "100%" }}>
+                  CLOSE INSIGHTS
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
