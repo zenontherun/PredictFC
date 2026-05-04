@@ -105,12 +105,41 @@ export async function savePrediction({ userId, matchId, predictedHome, predicted
       predicted_home: predictedHome,
       predicted_away: predictedAway,
       updated_at: new Date().toISOString(),
-    }, { onConflict: 'user_id,match_id' });
+    }, { onConflict: 'user_id,match_id' })
+    .select()
+    .single();
 
   if (error) throw error;
   return data;
 }
 
+export async function getBonusPicks(userId) {
+  const { data, error } = await supabase
+    .from('bonus_predictions')
+    .select('*')
+    .eq('user_id', userId)
+    .single();
+
+  if (error && error.code !== 'PGRST116') throw error; // PGRST116 is "No rows found"
+  return data || { golden_boot: '', golden_glove: '', player_of_tournament: '' };
+}
+
+export async function saveBonusPicks(userId, picks) {
+  const { data, error } = await supabase
+    .from('bonus_predictions')
+    .upsert({
+      user_id: userId,
+      golden_boot: picks.golden_boot,
+      golden_glove: picks.golden_glove,
+      player_of_tournament: picks.player_of_tournament,
+      updated_at: new Date().toISOString()
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
 
 // ============================================
 // LEADERBOARD
