@@ -20,10 +20,11 @@ import {
   updateMatchLock,
   updateMatchResult,
   calculateMatchPoints,
+  undoMatchPoints,
 } from "./supabase";
 
 // ─── Admin Dashboard Component ──────────────
-function AdminDashboard() {
+function AdminDashboard({ user }) {
   const [users, setUsers] = useState([]);
   const [matches, setAdminMatches] = useState([]);
   const [search, setSearch] = useState("");
@@ -70,6 +71,15 @@ function AdminDashboard() {
     } catch (err) { alert(err.message); }
   };
 
+  const handleUndoResult = async (match) => {
+    if (!window.confirm(`Are you sure you want to undo the score and reset points for ${match.home_team} vs ${match.away_team}?`)) return;
+    try {
+      await undoMatchPoints(match.id);
+      alert("Score undone and points reset successfully.");
+      loadData();
+    } catch (err) { alert(err.message); }
+  };
+
   const handleUpdatePoints = async (user) => {
     const pts = prompt(`New total points for ${user.username}:`, user.total_points);
     if (pts === null) return;
@@ -84,8 +94,10 @@ function AdminDashboard() {
   };
 
   const filteredUsers = users.filter(u =>
-    (u.username || "").toLowerCase().includes(search.toLowerCase()) ||
-    (u.email || "").toLowerCase().includes(search.toLowerCase())
+    u.role !== "superAdmin" && (
+      (u.username || "").toLowerCase().includes(search.toLowerCase()) ||
+      (u.email || "").toLowerCase().includes(search.toLowerCase())
+    )
   );
 
   return (
@@ -115,6 +127,7 @@ function AdminDashboard() {
                 <tr style={{ background: "#30363d", color: "#e6edf3", textAlign: "left" }}>
                   <th style={{ padding: "12px" }}>User</th>
                   <th style={{ padding: "12px" }}>Email</th>
+                  <th style={{ padding: "12px" }}>Role</th>
                   <th style={{ padding: "12px" }}>Joined</th>
                   <th style={{ padding: "12px" }}>Points</th>
                   <th style={{ padding: "12px" }}>Predictions</th>
@@ -127,6 +140,11 @@ function AdminDashboard() {
                   <tr key={u.id} style={{ borderBottom: "1px solid #30363d" }}>
                     <td style={{ padding: "12px", fontWeight: "bold" }}>{u.username}</td>
                     <td style={{ padding: "12px", color: "#e6edf3" }}>{u.email}</td>
+                    <td style={{ padding: "12px" }}>
+                      <span style={{ fontSize: 11, fontWeight: "bold", color: u.role === "superAdmin" ? "#ec7a26" : "#8b949e", textTransform: "uppercase" }}>
+                        {u.role === "superAdmin" ? "⭐ Admin" : "User"}
+                      </span>
+                    </td>
                     <td style={{ padding: "12px" }}>{new Date(u.created_at).toLocaleDateString()}</td>
                     <td style={{ padding: "12px", color: "#ec7a26", fontWeight: "bold" }}>{u.total_points}</td>
                     <td style={{ padding: "12px" }}>{u.predictions_made}</td>
@@ -136,11 +154,15 @@ function AdminDashboard() {
                       </span>
                     </td>
                     <td style={{ padding: "12px" }}>
-                      <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
-                        <button onClick={() => handleUpdatePoints(u)} style={{ padding: "6px 10px", background: "#484f58", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer", fontSize: 12, fontWeight: "bold" }}>Edit Pts</button>
-                        <button onClick={() => handleToggleStatus(u)} style={{ padding: "6px 10px", background: u.status === "active" ? "#ff6b6b" : "#00ff87", color: "#0b0f14", border: "none", borderRadius: "4px", cursor: "pointer", fontSize: 12, fontWeight: "bold" }}>{u.status === "active" ? "Deactivate" : "Activate"}</button>
-                        <button onClick={() => handleDelete(u)} style={{ padding: "6px 10px", background: "#ff0000", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer", fontSize: 12, fontWeight: "bold" }}>Delete</button>
-                      </div>
+                      {u.id === user?.id ? (
+                        <div style={{ textAlign: "right", color: "#8b949e", fontSize: 12, fontStyle: "italic", paddingRight: 8 }}>You (Admin)</div>
+                      ) : (
+                        <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+                          <button onClick={() => handleUpdatePoints(u)} style={{ padding: "6px 10px", background: "#484f58", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer", fontSize: 12, fontWeight: "bold" }}>Edit Pts</button>
+                          <button onClick={() => handleToggleStatus(u)} style={{ padding: "6px 10px", background: u.status === "active" ? "#ff6b6b" : "#00ff87", color: "#0b0f14", border: "none", borderRadius: "4px", cursor: "pointer", fontSize: 12, fontWeight: "bold" }}>{u.status === "active" ? "Deactivate" : "Activate"}</button>
+                          <button onClick={() => handleDelete(u)} style={{ padding: "6px 10px", background: "#ff0000", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer", fontSize: 12, fontWeight: "bold" }}>Delete</button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -166,9 +188,15 @@ function AdminDashboard() {
                 <button onClick={() => handleToggleLock(m)} style={{ padding: "8px 16px", background: m.is_locked ? "#5a1a1a" : "#30363d", color: m.is_locked ? "#ff6b6b" : "#8b949e", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: "bold", fontSize: 13 }}>
                   {m.is_locked ? "🔒 Unlock" : "🔓 Lock"}
                 </button>
-                <button onClick={() => handleSetResult(m)} disabled={!m.is_locked} style={{ padding: "8px 16px", background: !m.is_locked ? "#0d1117" : "#484f58", color: !m.is_locked ? "#30363d" : "#fff", border: "none", borderRadius: 6, cursor: !m.is_locked ? "not-allowed" : "pointer", fontWeight: "bold", fontSize: 13, minWidth: 120 }}>
-                  Enter Score
-                </button>
+                {m.result_home !== null ? (
+                  <button onClick={() => handleUndoResult(m)} style={{ padding: "8px 16px", background: "#5a1a1a", color: "#ff6b6b", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: "bold", fontSize: 13, minWidth: 120 }}>
+                    Undo Score
+                  </button>
+                ) : (
+                  <button onClick={() => handleSetResult(m)} disabled={!m.is_locked} style={{ padding: "8px 16px", background: !m.is_locked ? "#0d1117" : "#484f58", color: !m.is_locked ? "#30363d" : "#fff", border: "none", borderRadius: 6, cursor: !m.is_locked ? "not-allowed" : "pointer", fontWeight: "bold", fontSize: 13, minWidth: 120 }}>
+                    Enter Score
+                  </button>
+                )}
               </div>
             </div>
           ))}
@@ -459,15 +487,17 @@ export default function App() {
     const { data: { subscription } } = onAuthChange(async (authUser) => {
       if (authUser) {
         const profile = await getCurrentUser();
+        console.log("Fetched Profile:", profile); // DEBUG: Log the profile
         setUser(profile);
         
         // Only auto-redirect if no hash exists
         if (!window.location.hash) {
-          const defaultTab = profile?.role === "superAdmin" ? "admin" : "predict";
+          const defaultTab = profile?.role?.trim().toLowerCase() === "superadmin" ? "admin" : "predict";
           setTab(defaultTab);
           window.history.replaceState(null, "", `#${defaultTab}`);
         }
       } else {
+        console.log("No authUser found."); // DEBUG
         setUser(null);
       }
       setLoading(false);
@@ -552,16 +582,31 @@ export default function App() {
   };
 
   const handleSaveBonus = async () => {
+    if (!bonusPicks.golden_ball || !bonusPicks.golden_boot || !bonusPicks.golden_glove || !bonusPicks.young_player || !bonusPicks.fair_play) {
+      showToast("Please enter all 5 predictions before locking in!", "error");
+      return;
+    }
     setSavingBonus(true);
     try {
       const { saveBonusPicks } = await import("./supabase");
       const savedData = await saveBonusPicks(user.id, bonusPicks);
       setBonusPicks(savedData);
-      showToast("Tournament picks saved! 🌟");
+      showToast("Tournament picks locked in forever! 🌟");
     } catch (err) {
       showToast(err.message || "Failed to save tournament picks.", "error");
     } finally {
       setSavingBonus(false);
+    }
+  };
+
+  const handleResetBonus = async () => {
+    try {
+      const { resetMyPicks } = await import("./supabase");
+      const clearedData = await resetMyPicks(user.id);
+      setBonusPicks(clearedData);
+      showToast("Picks have been fully reset!");
+    } catch (err) {
+      showToast("Failed to reset.", "error");
     }
   };
 
@@ -694,7 +739,7 @@ export default function App() {
         <div style={{ padding: "28px 0 20px", textAlign: "center" }}>
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ fontSize: 13, color: "#8b949e" }}>{user.username}</span>
+              <span style={{ fontSize: 13, color: "#8b949e" }}>{user.username} ({user.role})</span>
               <button onClick={signOut} style={{ padding: "6px 14px", background: "#0b0f14", border: "1px solid #30363d", borderRadius: 8, color: "#8b949e", fontSize: 12, cursor: "pointer", fontFamily: "Barlow Condensed", fontWeight: 700 }}>SIGN OUT</button>
             </div>
           </div>
@@ -719,9 +764,9 @@ export default function App() {
         </div>
 
         {/* Tabs */}
-        <div className="tab-bar" style={{ display: "flex", borderBottom: "1px solid #30363d", marginBottom: 24, gap: 4, overflowX: "auto", whiteSpace: "nowrap", scrollbarWidth: "none" }}>
+        <div className="tab-bar" style={{ display: "flex", borderBottom: "1px solid #30363d", marginBottom: 24, gap: 4, flexWrap: "wrap" }}>
           {[{ id: "predict", label: "🎯 Predict" }, { id: "bonus", label: "🌟 Picks" }, { id: "groups", label: "🏁 Groups" }, { id: "leaderboard", label: "🏆 Leaderboard" }, { id: "scoring", label: "📋 Scoring" }]
-            .concat(user?.role === "superAdmin" ? [{ id: "admin", label: "⚙️ Admin" }] : [])
+            .concat(user?.role?.trim().toLowerCase() === "superadmin" ? [{ id: "admin", label: "⚙️ Admin" }] : [])
             .map(t => (
               <button key={t.id} className={`tab-btn ${tab === t.id ? "active" : ""}`} onClick={() => switchTab(t.id)}>{t.label}</button>
             ))}
@@ -733,7 +778,7 @@ export default function App() {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 16 }}>
               <h2 style={{ fontFamily: "Barlow Condensed", fontSize: 32, fontStyle: "italic", fontWeight: 800 }}>Matches</h2>
               
-              <div style={{ display: "flex", gap: 12, flex: 1, minWidth: 300, justifyContent: "flex-end" }}>
+              <div style={{ display: "flex", gap: 12, flex: 1, minWidth: 300, justifyContent: "flex-end", flexWrap: "wrap" }}>
                 <input 
                   type="text" 
                   placeholder="Search team or stadium..." 
@@ -741,6 +786,12 @@ export default function App() {
                   onChange={(e) => setSearch(e.target.value)}
                   style={{ background: "#010409", border: "1px solid #30363d", borderRadius: 8, padding: "8px 16px", color: "#fff", flex: 1, maxWidth: 300, outline: "none", fontSize: 14 }}
                 />
+                <button 
+                  onClick={() => setShowAllMatches(!showAllMatches)}
+                  style={{ background: "#0b0f14", border: "1px solid #30363d", borderRadius: 8, color: showAllMatches ? "#00ff87" : "#8b949e", fontSize: 11, fontWeight: 800, padding: "6px 12px", cursor: "pointer", fontFamily: "Barlow Condensed" }}
+                >
+                  {showAllMatches ? "HIDE PAST RESULTS" : "SHOW PAST RESULTS"}
+                </button>
                 <button 
                   onClick={() => setShowBracket(true)}
                   style={{ background: "#0b0f14", border: "1px solid #30363d", borderRadius: 8, color: "#ec7a26", fontSize: 11, fontWeight: 800, padding: "6px 12px", cursor: "pointer", fontFamily: "Barlow Condensed" }}
@@ -756,9 +807,9 @@ export default function App() {
                 .sort((a, b) => new Date(`${a.match_date}T${a.match_time}`) - new Date(`${b.match_date}T${b.match_time}`));
               
               const filtered = (showAllMatches ? matches : upcoming).filter(m => 
-                m.home_team.toLowerCase().includes(search.toLowerCase()) ||
-                m.away_team.toLowerCase().includes(search.toLowerCase()) ||
-                m.venue.toLowerCase().includes(search.toLowerCase())
+                (m.home_team?.toLowerCase() || "").includes(search.toLowerCase()) ||
+                (m.away_team?.toLowerCase() || "").includes(search.toLowerCase()) ||
+                (m.venue?.toLowerCase() || "").includes(search.toLowerCase())
               );
 
               // Group by date (converted to Nepal Time)
@@ -866,18 +917,19 @@ export default function App() {
 
                           <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid #30363d", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                             <span style={{ fontSize: 10, color: "#8b949e", fontWeight: 700 }}>🏟️ {match.venue}</span>
-                            {pts && (
-                              <div style={{ padding: "4px 8px", background: pts.color + "11", border: `1px solid ${pts.color}33`, borderRadius: 6, color: pts.color, fontSize: 10, fontWeight: 800 }}>
-                                +{pts.pts} PTS
-                              </div>
-                            )}
-                          </div>
-                          
-                          {hasResult && !pts && (
-                            <div style={{ marginTop: 8, textAlign: "center", fontSize: 11, color: "#8b949e", fontWeight: 600 }}>
-                              FT: {match.result_home} - {match.result_away}
+                            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                              {hasResult && (
+                                <span style={{ fontSize: 12, color: "#00ff87", fontWeight: 800, fontFamily: "Barlow Condensed", letterSpacing: 1 }}>
+                                  FT: {match.result_home} - {match.result_away}
+                                </span>
+                              )}
+                              {pts && (
+                                <div style={{ padding: "4px 8px", background: pts.color + "11", border: `1px solid ${pts.color}33`, borderRadius: 6, color: pts.color, fontSize: 10, fontWeight: 800 }}>
+                                  +{pts.pts} PTS
+                                </div>
+                              )}
                             </div>
-                          )}
+                          </div>
                         </div>
                       );
                     })}
@@ -893,25 +945,31 @@ export default function App() {
           <div style={{ maxWidth: 800, margin: "0 auto" }}>
             <div style={{ textAlign: "center", marginBottom: 40 }}>
               <h2 style={{ fontFamily: "Barlow Condensed", fontSize: 32, fontWeight: 800, color: "#ec7a26", textTransform: "uppercase", margin: 0 }}>Tournament Predictor</h2>
-              <p style={{ color: "#8b949e", fontSize: 14 }}>
+              <p style={{ color: "#8b949e", fontSize: 14, marginBottom: 8 }}>
                 {isTournamentStarted 
                   ? "The tournament has started! These picks are now locked." 
                   : "Predict the ultimate winners before the tournament kicks off!"}
+              </p>
+              <p style={{ color: "#ff6b6b", fontSize: 13, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", background: "#ff6b6b11", display: "inline-block", padding: "6px 12px", borderRadius: 8, border: "1px solid #ff6b6b33" }}>
+                ⚠️ Rule: Once chosen and locked in, they cannot be changed.
               </p>
             </div>
 
             <div style={{ display: "grid", gap: 24 }}>
               {[
-                { key: 'golden_boot', title: 'Golden Boot Winner', desc: 'Top Goalscorer of the Tournament', icon: '⚽', isGk: false },
-                { key: 'golden_glove', title: 'Golden Glove Winner', desc: 'Best Goalkeeper of the Tournament', icon: '🧤', isGk: true },
-                { key: 'player_of_tournament', title: 'Golden Ball Winner', desc: 'Best Player of the Tournament', icon: '🌟', isGk: false }
+                { key: 'golden_ball', title: 'Golden Ball', desc: 'Best player of the tournament', icon: '🌟', isGk: false },
+                { key: 'golden_boot', title: 'Golden Boot', desc: 'Top goal scorer', icon: '⚽', isGk: false },
+                { key: 'golden_glove', title: 'Golden Glove', desc: 'Best goalkeeper', icon: '🧤', isGk: true },
+                { key: 'young_player', title: 'Young Player Award', desc: 'Best young player', icon: '👶', isGk: false },
+                { key: 'fair_play', title: 'Fair Play Trophy', desc: 'Team with the best disciplinary/fair play record', icon: '🤝', isTeam: true }
               ].map(pick => {
-                const value = bonusPicks[pick.key];
-                const isOpen = focusedInput === pick.key;
+                const value = bonusPicks[pick.key] || "";
+                const isLocked = isTournamentStarted || !!bonusPicks.updated_at;
+                const isOpen = focusedInput === pick.key && !isLocked;
                 
                 // Filter players based on input and whether it's the GK award
-                const filteredPlayers = value ? POPULAR_PLAYERS.filter(p => 
-                  p.name.toLowerCase().includes(value.toLowerCase()) && 
+                const filteredPlayers = (!pick.isTeam) ? POPULAR_PLAYERS.filter(p => 
+                  (value ? p.name.toLowerCase().includes(value.toLowerCase()) : true) && 
                   (pick.isGk ? p.isGk : true)
                 ).slice(0, 5) : [];
 
@@ -927,24 +985,25 @@ export default function App() {
                       <div style={{ position: "relative" }}>
                         <input 
                           type="text" 
-                          placeholder={pick.isGk ? "Enter goalkeeper name..." : "Enter player name..."}
+                          placeholder={pick.isTeam ? "Enter team name..." : (pick.isGk ? "Enter goalkeeper name..." : "Enter player name...")}
                           value={value}
                           onChange={e => setBonusPicks(prev => ({ ...prev, [pick.key]: e.target.value }))}
-                          onFocus={() => !isTournamentStarted && setFocusedInput(pick.key)}
+                          onFocus={() => !isLocked && setFocusedInput(pick.key)}
                           onBlur={() => setTimeout(() => setFocusedInput(null), 200)}
-                          disabled={isTournamentStarted}
-                          style={{ width: "100%", background: isTournamentStarted ? "#0d1117" : "#010409", border: "1px solid #484f58", borderRadius: 8, padding: "12px 16px", color: isTournamentStarted ? "#8b949e" : "#fff", fontSize: 16, fontFamily: "Barlow Condensed", fontWeight: 700, outline: "none", transition: "border-color 0.2s", cursor: isTournamentStarted ? "not-allowed" : "text" }}
-                          onMouseOver={e => !isTournamentStarted && (e.target.style.borderColor = "#ec7a26")}
-                          onMouseOut={e => !isTournamentStarted && (e.target.style.borderColor = focusedInput === pick.key ? "#ec7a26" : "#484f58")}
+                          disabled={isLocked}
+                          style={{ width: "100%", background: isLocked ? "#0d1117" : "#010409", border: "1px solid #484f58", borderRadius: 8, padding: "12px 16px", color: isLocked ? (bonusPicks.updated_at ? "#00ff87" : "#8b949e") : "#fff", fontSize: 16, fontFamily: "Barlow Condensed", fontWeight: 700, outline: "none", transition: "border-color 0.2s", cursor: isLocked ? "not-allowed" : "text" }}
+                          onMouseOver={e => !isLocked && (e.target.style.borderColor = "#ec7a26")}
+                          onMouseOut={e => !isLocked && (e.target.style.borderColor = focusedInput === pick.key ? "#ec7a26" : "#484f58")}
                         />
                         
                         {/* Custom Autocomplete Dropdown */}
-                        {isOpen && !isTournamentStarted && filteredPlayers.length > 0 && (
+                        {isOpen && filteredPlayers.length > 0 && (
                           <div style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, background: "#010409", border: "1px solid #ec7a26", borderRadius: 8, zIndex: 50, overflow: "hidden", boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }}>
                             {filteredPlayers.map(p => (
                               <div 
                                 key={p.name}
-                                onClick={() => {
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
                                   setBonusPicks(prev => ({ ...prev, [pick.key]: p.name }));
                                   setFocusedInput(null);
                                 }}
@@ -966,15 +1025,25 @@ export default function App() {
               })}
             </div>
 
-            <div style={{ marginTop: 40, textAlign: "center" }}>
+            <div style={{ marginTop: 40, textAlign: "center", display: "flex", gap: 16, justifyContent: "center" }}>
+              {user?.isAdmin && (
+                <button 
+                  onClick={handleResetBonus} 
+                  style={{ background: "#ff6b6b22", border: "1px solid #ff6b6b", borderRadius: 12, padding: "16px 24px", color: "#ff6b6b", fontFamily: "Barlow Condensed", fontSize: 18, fontWeight: 900, cursor: "pointer", transition: "all 0.2s" }}
+                  onMouseOver={e => e.currentTarget.style.background = "#ff6b6b44"}
+                  onMouseOut={e => e.currentTarget.style.background = "#ff6b6b22"}
+                >
+                  RESET (ADMIN TEST)
+                </button>
+              )}
               <button 
                 onClick={handleSaveBonus} 
-                disabled={savingBonus || isTournamentStarted}
-                style={{ background: isTournamentStarted ? "#30363d" : "linear-gradient(135deg, #ec7a26, #c05b11)", border: "none", borderRadius: 12, padding: "16px 40px", color: isTournamentStarted ? "#8b949e" : "#0b0f14", fontFamily: "Barlow Condensed", fontSize: 18, fontWeight: 900, cursor: isTournamentStarted ? "not-allowed" : "pointer", transition: "transform 0.2s", boxShadow: isTournamentStarted ? "none" : "0 8px 24px rgba(236, 122, 38, 0.2)" }}
-                onMouseOver={e => !isTournamentStarted && (e.currentTarget.style.transform = "translateY(-2px)")}
-                onMouseOut={e => !isTournamentStarted && (e.currentTarget.style.transform = "translateY(0)")}
+                disabled={savingBonus || isTournamentStarted || !!bonusPicks.updated_at}
+                style={{ background: (isTournamentStarted || !!bonusPicks.updated_at) ? "#30363d" : "linear-gradient(135deg, #ec7a26, #c05b11)", border: "none", borderRadius: 12, padding: "16px 40px", color: (isTournamentStarted || !!bonusPicks.updated_at) ? (bonusPicks.updated_at ? "#00ff87" : "#8b949e") : "#0b0f14", fontFamily: "Barlow Condensed", fontSize: 18, fontWeight: 900, cursor: (isTournamentStarted || !!bonusPicks.updated_at) ? "not-allowed" : "pointer", transition: "transform 0.2s", boxShadow: (isTournamentStarted || !!bonusPicks.updated_at) ? "none" : "0 8px 24px rgba(236, 122, 38, 0.2)" }}
+                onMouseOver={e => !(isTournamentStarted || !!bonusPicks.updated_at) && (e.currentTarget.style.transform = "translateY(-2px)")}
+                onMouseOut={e => !(isTournamentStarted || !!bonusPicks.updated_at) && (e.currentTarget.style.transform = "translateY(0)")}
               >
-                {isTournamentStarted ? "🔒 PICKS LOCKED" : (savingBonus ? "SAVING..." : "LOCK IN TOURNAMENT PICKS")}
+                {!!bonusPicks.updated_at ? "✓ PICKS LOCKED IN" : (isTournamentStarted ? "🔒 PICKS CLOSED" : (savingBonus ? "SAVING..." : "LOCK IN TOURNAMENT PICKS"))}
               </button>
             </div>
           </div>
@@ -1135,10 +1204,10 @@ export default function App() {
         {/* ── ADMIN TAB ── */}
         {tab === "admin" && (
           <div>
-            {user?.role !== "superAdmin" ? (
+            {user?.role?.trim().toLowerCase() !== "superadmin" ? (
               <p style={{ color: "#ff6b6b", textAlign: "center", padding: 40, fontFamily: "Barlow Condensed", fontSize: 20 }}>❌ Access Denied.</p>
             ) : (
-              <AdminDashboard />
+              <AdminDashboard user={user} />
             )}
           </div>
         )}

@@ -88,6 +88,7 @@ select
   p.correct_outcomes,
   rank() over (order by p.total_points desc) as rank
 from public.profiles p
+where p.role != 'superAdmin'
 order by p.total_points desc;
 
 
@@ -154,6 +155,38 @@ begin
 end;
 $$ language plpgsql security definer;
 
+-- 5b. FUNCTION: Undo points for a match
+create or replace function public.undo_points(p_match_id int)
+returns void as $$
+declare
+  pred record;
+  pts int;
+begin
+  -- Loop through all predictions for this match where points were awarded
+  for pred in select * from public.predictions where match_id = p_match_id and points_earned is not null loop
+    pts := pred.points_earned;
+
+    -- Update user profile totals by subtracting the points they earned
+    update public.profiles
+    set
+      total_points = total_points - pts,
+      exact_scores = exact_scores - case when pts = 5 then 1 else 0 end,
+      correct_outcomes = correct_outcomes - case when pts >= 1 then 1 else 0 end
+    where id = pred.user_id;
+
+    -- Reset the points on the prediction
+    update public.predictions
+    set points_earned = null
+    where id = pred.id;
+  end loop;
+
+  -- Reset the match result back to null
+  update public.matches
+  set result_home = null, result_away = null
+  where id = p_match_id;
+
+end;
+$$ language plpgsql security definer;
 
 -- ============================================
 -- 6. ADMIN VIEWS & FUNCTIONS
@@ -204,6 +237,28 @@ create policy "Predictions are viewable" on public.predictions for select using 
 create policy "Users can insert own predictions" on public.predictions for insert with check (auth.uid() = user_id);
 create policy "Users can update own predictions" on public.predictions for update using (auth.uid() = user_id);
 
+
+-- ============================================
+-- 6. BONUS PREDICTIONS
+-- ============================================
+
+create table public.bonus_predictions (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references public.profiles(id) on delete cascade not null unique,
+  golden_boot text,
+  golden_glove text,
+  golden_ball text,
+  young_player text,
+  fair_play text,
+  player_of_match text,
+  created_at timestamp with time zone default now(),
+  updated_at timestamp with time zone default now()
+);
+
+alter table public.bonus_predictions enable row level security;
+create policy "Users can read all bonus_predictions" on public.bonus_predictions for select using (true);
+create policy "Users can insert own bonus_predictions" on public.bonus_predictions for insert with check (auth.uid() = user_id);
+create policy "Users can update own bonus_predictions" on public.bonus_predictions for update using (auth.uid() = user_id);
 
 -- ============================================
 -- SAMPLE MATCH DATA

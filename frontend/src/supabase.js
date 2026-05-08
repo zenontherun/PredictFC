@@ -121,7 +121,7 @@ export async function getBonusPicks(userId) {
     .single();
 
   if (error && error.code !== 'PGRST116') throw error; // PGRST116 is "No rows found"
-  return data || { golden_boot: '', golden_glove: '', player_of_tournament: '' };
+  return data || { golden_boot: '', golden_glove: '', golden_ball: '', young_player: '', fair_play: '' };
 }
 
 export async function saveBonusPicks(userId, picks) {
@@ -131,14 +131,35 @@ export async function saveBonusPicks(userId, picks) {
       user_id: userId,
       golden_boot: picks.golden_boot,
       golden_glove: picks.golden_glove,
-      player_of_tournament: picks.player_of_tournament,
+      golden_ball: picks.golden_ball,
+      young_player: picks.young_player,
+      fair_play: picks.fair_play,
       updated_at: new Date().toISOString()
-    })
+    }, { onConflict: 'user_id' })
     .select()
     .single();
 
   if (error) throw error;
   return data;
+}
+
+export async function resetMyPicks(userId) {
+  const { data, error } = await supabase
+    .from('bonus_predictions')
+    .update({
+      golden_boot: '',
+      golden_glove: '',
+      golden_ball: '',
+      young_player: '',
+      fair_play: '',
+      updated_at: null
+    })
+    .eq('user_id', userId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data || { golden_boot: '', golden_glove: '', golden_ball: '', young_player: '', fair_play: '' };
 }
 
 // ============================================
@@ -248,5 +269,10 @@ export async function updateMatchResult(matchId, resultHome, resultAway) {
 
 export async function calculateMatchPoints(matchId) {
   const { error } = await supabase.rpc('calculate_points', { p_match_id: matchId });
+  if (error) throw error;
+}
+
+export async function undoMatchPoints(matchId) {
+  const { error } = await supabase.rpc('undo_points', { p_match_id: matchId });
   if (error) throw error;
 }
