@@ -2,7 +2,9 @@
 // App.jsx — Full app with Supabase backend
 // ============================================
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { motion, useInView, AnimatePresence } from "framer-motion";
+import HomePage from "./HomePage";
 import {
   supabase,
   signOut,
@@ -461,7 +463,7 @@ const POPULAR_PLAYERS = [
 ];
 
 export default function App() {
-  const [tab, setTab] = useState("predict");
+  const [tab, setTab] = useState("home");
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [matches, setMatches] = useState([]);
@@ -492,7 +494,7 @@ export default function App() {
         
         // Only auto-redirect if no hash exists
         if (!window.location.hash) {
-          const defaultTab = profile?.role?.trim().toLowerCase() === "superadmin" ? "admin" : "predict";
+          const defaultTab = profile?.role?.trim().toLowerCase() === "superadmin" ? "admin" : "home";
           setTab(defaultTab);
           window.history.replaceState(null, "", `#${defaultTab}`);
         }
@@ -509,7 +511,7 @@ export default function App() {
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.replace("#", "");
-      if (hash && ["predict", "bonus", "groups", "leaderboard", "scoring", "admin"].includes(hash)) {
+      if (hash && ["home", "predict", "bonus", "groups", "leaderboard", "scoring", "admin"].includes(hash)) {
         setTab(hash);
       }
     };
@@ -623,94 +625,39 @@ export default function App() {
   if (!user) return <AuthScreen />;
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0b0f14", fontFamily: "'Barlow', sans-serif", color: "#fff", position: "relative" }}>
+    <div style={{ minHeight: "100vh", background: "#000000", fontFamily: "'Barlow', sans-serif", color: "#fff", position: "relative" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:ital,wght@0,700;0,800;1,800&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
         ::-webkit-scrollbar { width: 4px; }
-        ::-webkit-scrollbar-track { background: #0d1a2e; }
-        ::-webkit-scrollbar-thumb { background: #1e3a5f; border-radius: 2px; }
+        ::-webkit-scrollbar-track { background: #000; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
         input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
         input[type=number] { -moz-appearance: textfield; }
-        .tab-btn { padding: 10px 24px; border: none; background: transparent; color: #8b949e; font-family: 'Barlow Condensed', sans-serif; font-size: 15px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.2s; }
-        .tab-btn.active { color: #fff; border-bottom-color: #ec7a26; }
-        .tab-btn:hover:not(.active) { color: #e6edf3; }
-        .match-card { background: linear-gradient(135deg, #161b22 0%, #0d1117 100%); border: 1px solid #30363d; border-radius: 16px; padding: 20px 24px; margin-bottom: 16px; transition: border-color 0.2s, transform 0.2s; position: relative; overflow: hidden; }
-        .match-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, transparent, #ec7a2644, transparent); }
-        .match-card:hover { border-color: #484f58; transform: translateY(-1px); }
-        .match-card.locked { border-color: #1a3a1a; }
-        .match-card.locked::before { background: linear-gradient(90deg, transparent, #00ff8744, transparent); }
-        .score-input { width: 56px; height: 56px; background: #010409; border: 2px solid #30363d; border-radius: 10px; color: #fff; font-family: 'Barlow Condensed', sans-serif; font-size: 28px; font-weight: 800; text-align: center; outline: none; transition: border-color 0.2s; }
-        .score-input:focus { border-color: #ec7a26; box-shadow: 0 0 0 3px #ec7a2622; }
-        .score-input:disabled { opacity: 0.5; cursor: not-allowed; }
-        .submit-btn { padding: 10px 20px; background: linear-gradient(135deg, #ec7a26, #c05b11); border: none; border-radius: 8px; color: #0b0f14; font-family: 'Barlow Condensed', sans-serif; font-size: 14px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; cursor: pointer; transition: opacity 0.2s, transform 0.1s; }
-        .submit-btn:hover { opacity: 0.9; transform: scale(1.02); }
-        .submit-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        
+        .score-input-clean {
+          width: 48px; height: 48px; background: #000; border: 1px solid #333; border-radius: 8px; color: #fff; font-family: 'Barlow Condensed', sans-serif; font-size: 24px; font-weight: 800; text-align: center; outline: none; transition: all 0.2s;
+        }
+        .score-input-clean:focus { border-color: #ec7a26; box-shadow: 0 0 0 2px rgba(236, 122, 38, 0.2); }
+        .score-input-clean:disabled { opacity: 0.7; cursor: default; }
+        
+        .predict-btn { background: #ec7a26; border: none; border-radius: 8px; color: #000; font-family: 'Barlow Condensed', sans-serif; font-size: 14px; font-weight: 900; letter-spacing: 1px; padding: 12px 20px; cursor: pointer; transition: transform 0.2s, background 0.2s; width: 100%; }
+        .predict-btn:hover:not(:disabled) { background: #f98b3f; transform: scale(1.02); }
+        .predict-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        .match-card-hover:hover { border-color: #333 !important; transform: translateY(-2px); }
+
         .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); padding: 12px 24px; border-radius: 10px; font-weight: 600; font-size: 14px; z-index: 1000; animation: slideUp 0.3s ease; pointer-events: none; }
-        .toast.success { background: #0d2a1a; border: 1px solid #00ff87; color: #00ff87; }
+        .toast.success { background: #0d2a1a; border: 1px solid #04844d; color: #04844d; }
         .toast.error { background: #2a0d0d; border: 1px solid #ff6b6b; color: #ff6b6b; }
         @keyframes slideUp { from { opacity: 0; transform: translateX(-50%) translateY(10px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-        .score-input-sm { 
-          width: 44px; 
-          height: 44px; 
-          background: #0b0f14; 
-          border: 1.5px solid #484f58; 
-          border-radius: 10px; 
-          color: #fff; 
-          font-family: 'Barlow Condensed', sans-serif; 
-          font-size: 24px; 
-          font-weight: 800; 
-          text-align: center; 
-          outline: none; 
-          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); 
-          box-shadow: inset 0 2px 8px rgba(0,0,0,0.5);
-        }
-        .score-input-sm:focus { 
-          border-color: #04844d; 
-          background: #161b22;
-          box-shadow: 0 0 15px rgba(4, 132, 77, 0.2), inset 0 2px 4px rgba(0,0,0,0.5);
-          transform: scale(1.05);
-        }
-        .score-input-sm:disabled {
-          opacity: 1;
-          background: #0b0f14;
-          border-color: #30363d;
-          color: #04844d;
-          cursor: default;
-          box-shadow: none;
-        }
-        .lock-btn-sm { width: 100%; background: linear-gradient(135deg, #04844d, #025832); border: none; border-radius: 10px; color: #0b0f14; font-family: 'Barlow Condensed', sans-serif; font-weight: 800; font-size: 13px; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 12px rgba(4, 132, 77, 0.2); }
-        .lock-btn-sm:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(4, 132, 77, 0.3); }
-        .match-card-hover:hover { border-color: #ec7a2655 !important; transform: translateY(-2px); z-index: 10; }
-        .score-box-container {
-          display: flex; 
-          flex-direction: column; 
-          align-items: center; 
-          background: linear-gradient(180deg, rgba(22, 27, 34, 0.9) 0%, rgba(13, 17, 23, 0.95) 100%); 
-          padding: 12px; 
-          border-radius: 18px; 
-          border: 1px solid #484f58;
-          box-shadow: 0 8px 32px rgba(0,0,0,0.4), inset 0 1px 1px rgba(255,255,255,0.05);
-          backdrop-filter: blur(8px);
-          transition: all 0.3s;
-          min-width: 80px;
-          gap: 4px;
-        }
-        .score-box-container.locked { background: linear-gradient(180deg, rgba(0, 255, 135, 0.05) 0%, rgba(0, 255, 135, 0.1) 100%); border-color: rgba(0, 255, 135, 0.3); }
-        .score-box-container:focus-within {
-          border-color: #04844d66;
-          box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 15px rgba(4, 132, 77, 0.1);
-        }
 
         /* Mobile Adjustments */
         @media (max-width: 768px) {
           .match-card-container { grid-template-columns: 1fr !important; }
           .match-card-content { flex-direction: column !important; gap: 20px !important; }
           .match-card-row { width: 100% !important; }
-          .score-box-container { flex-direction: row !important; width: 100% !important; min-width: auto !important; padding: 12px 20px !important; justify-content: space-between !important; }
-          .score-box-container > div { flex-direction: row !important; gap: 12px !important; width: auto !important; }
-          .lock-btn-sm { width: 80px !important; }
           .tab-bar { overflow-x: auto !important; padding-bottom: 4px !important; }
           .tab-bar::-webkit-scrollbar { display: none; }
           .stats-bar { flex-direction: column !important; }
@@ -726,65 +673,83 @@ export default function App() {
         }
       `}</style>
 
-      {/* Flashy World Cup Background */}
+      {/* Background Gradients */}
       <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: -1 }}>
-        <div style={{ position: "absolute", inset: 0, backgroundImage: "url('/bg_image.png')", backgroundSize: "cover", backgroundPosition: "center", opacity: 0.5 }} />
-        {/* Dark overlay to ensure readability while letting the image pop */}
-        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(11, 15, 20, 0.7) 0%, rgba(11, 15, 20, 0.95) 100%)" }} />
+        <div style={{ position: "absolute", top: "-20%", left: "-10%", width: "60%", height: "60%", background: "radial-gradient(circle, rgba(4, 132, 77, 0.15) 0%, transparent 70%)" }} />
+        <div style={{ position: "absolute", bottom: "-20%", right: "-10%", width: "60%", height: "60%", background: "radial-gradient(circle, rgba(236, 122, 38, 0.1) 0%, transparent 70%)" }} />
       </div>
 
-      <div style={{ position: "relative", maxWidth: 680, margin: "0 auto", padding: "0 16px 80px" }}>
+      <div style={{ position: "relative", maxWidth: 1000, margin: "0 auto", padding: "0 16px 80px" }}>
 
-        {/* Header */}
-        <div style={{ padding: "28px 0 20px", textAlign: "center" }}>
-          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ fontSize: 13, color: "#8b949e" }}>{user.username} ({user.role})</span>
-              <button onClick={signOut} style={{ padding: "6px 14px", background: "#0b0f14", border: "1px solid #30363d", borderRadius: 8, color: "#8b949e", fontSize: 12, cursor: "pointer", fontFamily: "Barlow Condensed", fontWeight: 700 }}>SIGN OUT</button>
-            </div>
+        {/* Modern Navbar */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "24px 0", borderBottom: "1px solid #222", marginBottom: 40, flexWrap: "wrap", gap: 20 }}>
+          <div style={{ display: "flex", gap: 32, overflowX: "auto" }} className="tab-bar">
+            {[{ id: "home", label: "HOME" }, { id: "predict", label: "MATCHES" }, { id: "bonus", label: "PICKS" }, { id: "groups", label: "GROUPS" }, { id: "leaderboard", label: "LEADERBOARD" }, { id: "scoring", label: "SCORING" }]
+              .concat(user?.role?.trim().toLowerCase() === "superadmin" ? [{ id: "admin", label: "ADMIN" }] : [])
+              .map(t => (
+                <button key={t.id} style={{
+                  background: "transparent", border: "none", fontFamily: "Barlow Condensed", fontSize: 16, fontWeight: 800, letterSpacing: 1, cursor: "pointer",
+                  color: tab === t.id ? "#fff" : "#9CA3AF", transition: "color 0.2s", whiteSpace: "nowrap"
+                }} onClick={() => switchTab(t.id)} onMouseOver={e => e.currentTarget.style.color = "#fff"} onMouseOut={e => e.currentTarget.style.color = tab === t.id ? "#fff" : "#9CA3AF"}>
+                  {t.label}
+                </button>
+              ))}
           </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+             <span style={{ fontSize: 14, color: "#9CA3AF", fontFamily: "Barlow Condensed", fontWeight: 700, letterSpacing: 1 }}>{user.username.toUpperCase()}</span>
+             <button onClick={signOut} style={{ background: "#ec7a26", color: "#000", border: "none", padding: "8px 24px", borderRadius: 8, fontFamily: "Barlow Condensed", fontWeight: 900, fontSize: 14, cursor: "pointer", letterSpacing: 1, transition: "transform 0.2s" }} onMouseOver={e => e.currentTarget.style.transform = "scale(1.05)"} onMouseOut={e => e.currentTarget.style.transform = "scale(1)"}>SIGN OUT</button>
+          </div>
+        </div>
 
-          <h1 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: "clamp(36px, 8vw, 56px)", fontWeight: 900, fontStyle: "italic", lineHeight: 1.1, margin: 0, paddingBottom: 8 }}>
-            <span style={{ display: "block", background: "linear-gradient(135deg, #04844d, #025832)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>FIFA WORLD CUP 26™</span>
-            <span style={{ display: "block", background: "linear-gradient(135deg, #ec7a26, #c05b11)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>PREDICT & WIN</span>
+        {/* Header Title & Stats */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 40, flexWrap: "wrap", gap: 20 }}>
+          <h1 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: "clamp(36px, 6vw, 48px)", fontWeight: 900, fontStyle: "italic", lineHeight: 1, margin: 0 }}>
+            <span style={{ color: "#fff" }}>WORLD CUP </span>
+            <span style={{ color: "#ec7a26" }}>PREDICTOR</span>
           </h1>
 
-          <div className="stats-bar" style={{ display: "flex", justifyContent: "center", gap: 16, marginTop: 20, flexWrap: "wrap" }}>
+          <div className="stats-bar" style={{ display: "flex", gap: 16 }}>
             {[
-              { label: "Your Points", value: userLeaderboardEntry?.total_points ?? user.total_points ?? 0, color: "#ec7a26" },
-              { label: "Rank", value: userLeaderboardEntry ? `#${userLeaderboardEntry.rank}` : "—", color: "#8b949e" },
-              { label: "Predicted", value: `${totalPredicted}/${matches.length}`, color: "#04844d" },
+              { label: "PTS", value: userLeaderboardEntry?.total_points ?? user.total_points ?? 0, color: "#ec7a26" },
+              { label: "RANK", value: userLeaderboardEntry ? `#${userLeaderboardEntry.rank}` : "—", color: "#9CA3AF" },
+              { label: "PICKS", value: `${totalPredicted}/${matches.length}`, color: "#04844d" },
             ].map(s => (
-              <div key={s.label} className="stats-card" style={{ background: "#161b22", border: "1px solid #30363d", borderRadius: 12, padding: "10px 20px", textAlign: "center" }}>
-                <div style={{ color: s.color, fontFamily: "Barlow Condensed", fontSize: 26, fontWeight: 800 }}>{s.value}</div>
-                <div style={{ color: "#8b949e", fontSize: 11, letterSpacing: 1, textTransform: "uppercase", marginTop: 2 }}>{s.label}</div>
+              <div key={s.label} className="stats-card" style={{ background: "#111", border: "1px solid #222", borderRadius: 12, padding: "12px 24px", textAlign: "center" }}>
+                <div style={{ color: s.color, fontFamily: "Barlow Condensed", fontSize: 24, fontWeight: 900 }}>{s.value}</div>
+                <div style={{ color: "#9CA3AF", fontSize: 11, letterSpacing: 1, fontWeight: 800, marginTop: 2 }}>{s.label}</div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="tab-bar" style={{ display: "flex", borderBottom: "1px solid #30363d", marginBottom: 24, gap: 4, flexWrap: "wrap" }}>
-          {[{ id: "predict", label: "🎯 Predict" }, { id: "bonus", label: "🌟 Picks" }, { id: "groups", label: "🏁 Groups" }, { id: "leaderboard", label: "🏆 Leaderboard" }, { id: "scoring", label: "📋 Scoring" }]
-            .concat(user?.role?.trim().toLowerCase() === "superadmin" ? [{ id: "admin", label: "⚙️ Admin" }] : [])
-            .map(t => (
-              <button key={t.id} className={`tab-btn ${tab === t.id ? "active" : ""}`} onClick={() => switchTab(t.id)}>{t.label}</button>
-            ))}
-        </div>
+        {/* ── HOME TAB ── */}
+        {tab === "home" && (
+          <HomePage
+            user={user}
+            matches={matches}
+            leaderboard={leaderboard}
+            predictions={predictions}
+            totalPredicted={totalPredicted}
+            userLeaderboardEntry={userLeaderboardEntry}
+            switchTab={switchTab}
+            getFlagUrl={getFlagUrl}
+            formatMatchTimes={formatMatchTimes}
+          />
+        )}
 
         {/* ── PREDICT TAB ── */}
         {tab === "predict" && (
           <div style={{ maxWidth: 1000, margin: "0 auto" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 16 }}>
-              <h2 style={{ fontFamily: "Barlow Condensed", fontSize: 32, fontStyle: "italic", fontWeight: 800 }}>Matches</h2>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 32, flexWrap: "wrap", gap: 16 }}>
+              <h2 style={{ fontFamily: "Barlow Condensed", fontSize: 24, fontWeight: 800, color: "#fff", letterSpacing: 1, textTransform: "uppercase" }}>Matches</h2>
               
               <div style={{ display: "flex", gap: 12, flex: 1, minWidth: 300, justifyContent: "flex-end", flexWrap: "wrap" }}>
                 <input 
                   type="text" 
-                  placeholder="Search team or stadium..." 
+                  placeholder="SEARCH TEAM OR STADIUM..." 
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  style={{ background: "#010409", border: "1px solid #30363d", borderRadius: 8, padding: "8px 16px", color: "#fff", flex: 1, maxWidth: 300, outline: "none", fontSize: 14 }}
+                  style={{ background: "#111", border: "1px solid #222", borderRadius: 8, padding: "8px 16px", color: "#fff", flex: 1, maxWidth: 300, outline: "none", fontSize: 14, fontFamily: "Barlow Condensed", letterSpacing: 1 }}
                 />
                 <button 
                   onClick={() => setShowAllMatches(!showAllMatches)}
@@ -825,8 +790,8 @@ export default function App() {
               
               return Object.entries(groups).map(([header, matchGroup]) => (
                 <div key={header} style={{ marginBottom: 32 }}>
-                  <div style={{ background: "#30363d", padding: "10px 20px", borderRadius: "8px 8px 0 0", fontFamily: "Barlow Condensed", fontSize: 18, fontWeight: 700, color: "#e6edf3", marginBottom: 16 }}>
-                    {header}
+                  <div style={{ background: "transparent", padding: "0 0 12px 0", borderBottom: "1px solid #222", fontFamily: "Barlow Condensed", fontSize: 20, fontWeight: 800, color: "#fff", marginBottom: 20, letterSpacing: 1 }}>
+                    {header.toUpperCase()}
                   </div>
                   <div className="match-card-container" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(450px, 1fr))", gap: 16 }}>
                     {matchGroup.map(match => {
@@ -837,31 +802,23 @@ export default function App() {
                       const pts = hasResult && pred.predicted_home !== undefined ? calcPoints(pred, match) : null;
                       
                       return (
-                        <div key={match.id} onClick={() => setSelectedMatch(match)} style={{ background: "#161b22", border: "1px solid #30363d", borderRadius: 12, padding: "16px 20px", position: "relative", transition: "transform 0.2s", cursor: "pointer" }} className="match-card-hover">
-                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
-                            <div style={{ fontSize: 11, color: "#8b949e", fontWeight: 800, textTransform: "uppercase", letterSpacing: 1 }}>Group {match.group_name}</div>
-                            <div style={{ textAlign: "right" }}>
-                              <div style={{ fontSize: 13, fontWeight: 800, color: "#fff" }}>
-                                {match.nTime.npt} <span style={{ color: "#8b949e", fontWeight: 500, fontSize: 11 }}>NPT</span>
-                              </div>
-                              <div style={{ fontSize: 10, color: "#8b949e", fontWeight: 700 }}>
-                                {match.nTime.utc} <span style={{ fontWeight: 500 }}>UTC</span>
-                              </div>
-                            </div>
+                        <div key={match.id} onClick={() => setSelectedMatch(match)} style={{ background: "#111111", border: "1px solid #222222", borderRadius: 16, padding: "24px", position: "relative", transition: "all 0.2s", cursor: "pointer" }} className="match-card-hover">
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+                            <div style={{ fontSize: 12, color: "#ec7a26", fontWeight: 800, fontFamily: "Barlow Condensed", letterSpacing: 1, textTransform: "uppercase" }}>GROUP {match.group_name}</div>
+                            <div style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 700, fontFamily: "Barlow Condensed", letterSpacing: 1 }}>{match.nTime.date.toUpperCase()}</div>
                           </div>
 
                           <div className="match-card-content" style={{ display: "flex", alignItems: "center", gap: 24 }}>
-                            {/* Team & Score Section */}
-                            <div className="match-card-row" style={{ flex: 1, display: "flex", flexDirection: "column", gap: 20 }}>
-                              {/* Home Team Row */}
+                            <div className="match-card-row" style={{ flex: 1, display: "flex", flexDirection: "column", gap: 16 }}>
+                              {/* Home Team */}
                               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                                  <img src={getFlagUrl(match.home_team)} alt="" style={{ width: 32, height: 22, borderRadius: 3, objectFit: "cover", border: "1px solid #30363d" }} />
-                                  <span style={{ fontFamily: "Barlow Condensed", fontWeight: 700, fontSize: 20, color: "#fff" }}>{match.home_team}</span>
+                                <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                                  <img src={getFlagUrl(match.home_team)} alt="" style={{ width: 36, height: 24, borderRadius: 4, objectFit: "cover", boxShadow: "0 2px 8px rgba(0,0,0,0.5)" }} />
+                                  <span style={{ fontFamily: "Barlow Condensed", fontWeight: 800, fontSize: 24, color: "#fff", textTransform: "uppercase", letterSpacing: 1 }}>{match.home_team}</span>
                                 </div>
                                 <input 
                                   type="number" 
-                                  className="score-input-sm" 
+                                  className="score-input-clean" 
                                   value={pred.predicted_home ?? ""} 
                                   disabled={isLocked} 
                                   onChange={e => handleInput(match.id, "home", e.target.value)} 
@@ -870,15 +827,15 @@ export default function App() {
                                 />
                               </div>
 
-                              {/* Away Team Row */}
+                              {/* Away Team */}
                               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                                  <img src={getFlagUrl(match.away_team)} alt="" style={{ width: 32, height: 22, borderRadius: 3, objectFit: "cover", border: "1px solid #30363d" }} />
-                                  <span style={{ fontFamily: "Barlow Condensed", fontWeight: 700, fontSize: 20, color: "#away_team" }}>{match.away_team}</span>
+                                <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                                  <img src={getFlagUrl(match.away_team)} alt="" style={{ width: 36, height: 24, borderRadius: 4, objectFit: "cover", boxShadow: "0 2px 8px rgba(0,0,0,0.5)" }} />
+                                  <span style={{ fontFamily: "Barlow Condensed", fontWeight: 800, fontSize: 24, color: "#fff", textTransform: "uppercase", letterSpacing: 1 }}>{match.away_team}</span>
                                 </div>
                                 <input 
                                   type="number" 
-                                  className="score-input-sm" 
+                                  className="score-input-clean" 
                                   value={pred.predicted_away ?? ""} 
                                   disabled={isLocked} 
                                   onChange={e => handleInput(match.id, "away", e.target.value)} 
@@ -887,44 +844,34 @@ export default function App() {
                                 />
                               </div>
                             </div>
-
+                            
                             {/* Lock Section */}
-                            <div onClick={e => e.stopPropagation()} className={`score-box-container ${isLocked ? 'locked' : ''}`}>
-                              {!isLocked ? (
-                                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-                                  <button className="lock-btn-sm" onClick={() => handleSave(match.id)} disabled={saving[match.id]}>
-                                    {saving[match.id] ? "..." : "SAVE"}
-                                  </button>
-                                  {hasSaved && <span style={{ fontSize: 9, color: "#00ff87", fontWeight: 800 }}>✓ SAVED</span>}
-                                </div>
-                              ) : (
-                                <div style={{ 
-                                  fontSize: 9, 
-                                  color: "#ff6b6b", 
-                                  fontWeight: 900, 
-                                  letterSpacing: 1,
-                                  display: "flex",
-                                  flexDirection: "column",
-                                  alignItems: "center",
-                                  gap: 4
-                                }}>
-                                  <span style={{ fontSize: 16 }}>🔒</span>
-                                  <span>LOCKED</span>
-                                </div>
-                              )}
+                            <div onClick={e => e.stopPropagation()} style={{ minWidth: 100, display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+                               {!isLocked ? (
+                                  <>
+                                    <button className="predict-btn" onClick={() => handleSave(match.id)} disabled={saving[match.id]}>
+                                      {saving[match.id] ? "SAVING..." : "PREDICT >"}
+                                    </button>
+                                    {hasSaved && <span style={{ fontSize: 10, color: "#04844d", fontWeight: 800, fontFamily: "Barlow Condensed", letterSpacing: 1 }}>✓ SAVED</span>}
+                                  </>
+                               ) : (
+                                  <div style={{ padding: "8px 16px", background: "#222", borderRadius: 8, color: "#9CA3AF", fontSize: 12, fontWeight: 800, fontFamily: "Barlow Condensed", letterSpacing: 1 }}>
+                                    🔒 LOCKED
+                                  </div>
+                               )}
                             </div>
                           </div>
 
-                          <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid #30363d", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <span style={{ fontSize: 10, color: "#8b949e", fontWeight: 700 }}>🏟️ {match.venue}</span>
+                          <div style={{ marginTop: 24, paddingTop: 16, borderTop: "1px solid #222", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <span style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 700, fontFamily: "Barlow Condensed", letterSpacing: 1, textTransform: "uppercase" }}>{match.nTime.npt} • {match.venue}</span>
                             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                               {hasResult && (
-                                <span style={{ fontSize: 12, color: "#00ff87", fontWeight: 800, fontFamily: "Barlow Condensed", letterSpacing: 1 }}>
+                                <span style={{ fontSize: 14, color: "#fff", fontWeight: 800, fontFamily: "Barlow Condensed", letterSpacing: 1 }}>
                                   FT: {match.result_home} - {match.result_away}
                                 </span>
                               )}
                               {pts && (
-                                <div style={{ padding: "4px 8px", background: pts.color + "11", border: `1px solid ${pts.color}33`, borderRadius: 6, color: pts.color, fontSize: 10, fontWeight: 800 }}>
+                                <div style={{ padding: "4px 10px", background: pts.pts > 0 ? "#04844d22" : "#ff6b6b22", borderRadius: 6, color: pts.pts > 0 ? "#04844d" : "#ff6b6b", fontSize: 12, fontWeight: 800, fontFamily: "Barlow Condensed" }}>
                                   +{pts.pts} PTS
                                 </div>
                               )}
@@ -974,7 +921,7 @@ export default function App() {
                 ).slice(0, 5) : [];
 
                 return (
-                  <div key={pick.key} style={{ position: "relative", zIndex: isOpen ? 100 : 1, background: "linear-gradient(135deg, #161b22, #0d1117)", border: "1px solid #30363d", borderRadius: 16, padding: "20px 24px", display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap", boxShadow: isOpen ? "0 10px 40px rgba(0,0,0,0.5)" : "none", transition: "all 0.2s" }}>
+                  <div key={pick.key} style={{ position: "relative", zIndex: isOpen ? 100 : 1, background: "#111", border: "1px solid #222", borderRadius: 16, padding: "20px 24px", display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap", boxShadow: isOpen ? "0 10px 40px rgba(0,0,0,0.5)" : "none", transition: "all 0.2s" }}>
                     <div style={{ fontSize: 36, background: "#0b0f14", width: 70, height: 70, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid #484f58", flexShrink: 0 }}>
                       {pick.icon}
                     </div>
@@ -1055,15 +1002,15 @@ export default function App() {
             {(() => {
               const groupData = calculateGroupStandings(matches);
               return Object.entries(groupData).map(([groupName, teams]) => (
-                <div key={groupName} style={{ background: "linear-gradient(135deg, #161b22 0%, #0d1117 100%)", border: "1px solid #30363d", borderRadius: 16, overflow: "hidden" }}>
-                  <div style={{ padding: "16px 20px", background: "#30363d", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div key={groupName} style={{ background: "#111", border: "1px solid #222", borderRadius: 16, overflow: "hidden" }}>
+                  <div style={{ padding: "16px 20px", background: "#222", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <h3 style={{ fontFamily: "Barlow Condensed", fontSize: 24, fontWeight: 800, fontStyle: "italic", color: "#ec7a26", margin: 0 }}>GROUP {groupName}</h3>
                     <div style={{ fontSize: 11, color: "#8b949e", fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>Official Standings</div>
                   </div>
                   <div style={{ overflowX: "auto" }}>
                     <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: 13 }}>
                       <thead>
-                        <tr style={{ color: "#8b949e", borderBottom: "1px solid #30363d" }}>
+                        <tr style={{ color: "#8b949e", borderBottom: "1px solid #222" }}>
                           <th style={{ padding: "12px 16px", fontWeight: 700 }}>POS</th>
                           <th style={{ padding: "12px 16px", fontWeight: 700 }}>TEAM</th>
                           <th style={{ padding: "12px 8px", textAlign: "center", fontWeight: 700 }}>PLD</th>
@@ -1073,18 +1020,18 @@ export default function App() {
                       </thead>
                       <tbody>
                         {teams.map((team, idx) => (
-                          <tr key={team.name} style={{ borderBottom: idx === teams.length - 1 ? "none" : "1px solid #010409", background: idx < 2 ? "#00ff8705" : "transparent" }}>
-                            <td style={{ padding: "16px", fontWeight: 800, color: idx < 2 ? "#00ff87" : "#8b949e" }}>{idx + 1}</td>
+                          <tr key={team.name} style={{ borderBottom: idx === teams.length - 1 ? "none" : "1px solid #222", background: idx < 2 ? "rgba(4, 132, 77, 0.05)" : "transparent" }}>
+                            <td style={{ padding: "16px", fontWeight: 800, color: idx < 2 ? "#04844d" : "#8b949e" }}>{idx + 1}</td>
                             <td style={{ padding: "16px" }}>
                               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                                <img src={getFlagUrl(team.name)} alt="" style={{ width: 24, height: 16, borderRadius: 2, objectFit: "cover", border: "1px solid #30363d" }} />
+                                <img src={getFlagUrl(team.name)} alt="" style={{ width: 24, height: 16, borderRadius: 2, objectFit: "cover", border: "1px solid #222" }} />
                                 <span style={{ fontWeight: 700, fontFamily: "Barlow Condensed", fontSize: 16 }}>{team.name}</span>
                               </div>
                             </td>
                             <td style={{ padding: "16px 8px", textAlign: "center", color: "#fff", fontWeight: 600 }}>{team.pld}</td>
-                            <td style={{ padding: "16px 8px", textAlign: "center", color: team.gd > 0 ? "#00ff87" : team.gd < 0 ? "#ff6b6b" : "#8b949e", fontWeight: 600 }}>{team.gd > 0 ? `+${team.gd}` : team.gd}</td>
+                            <td style={{ padding: "16px 8px", textAlign: "center", color: team.gd > 0 ? "#04844d" : team.gd < 0 ? "#ff6b6b" : "#8b949e", fontWeight: 600 }}>{team.gd > 0 ? `+${team.gd}` : team.gd}</td>
                             <td style={{ padding: "16px", textAlign: "center" }}>
-                              <span style={{ display: "inline-block", background: "#ec7a2622", color: "#ec7a26", padding: "4px 10px", borderRadius: 6, fontWeight: 800, fontSize: 15, fontFamily: "Barlow Condensed" }}>{team.pts}</span>
+                              <span style={{ display: "inline-block", background: "rgba(236, 122, 38, 0.1)", color: "#ec7a26", padding: "4px 10px", borderRadius: 6, fontWeight: 800, fontSize: 15, fontFamily: "Barlow Condensed" }}>{team.pts}</span>
                             </td>
                           </tr>
                         ))}
@@ -1092,7 +1039,7 @@ export default function App() {
                     </table>
                   </div>
                   {teams.length > 0 && (
-                    <div style={{ padding: "10px 16px", background: "#01040933", borderTop: "1px solid #30363d", display: "flex", gap: 12 }}>
+                    <div style={{ padding: "10px 16px", background: "#000", borderTop: "1px solid #222", display: "flex", gap: 12 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                         <div style={{ width: 8, height: 8, borderRadius: 2, background: "#00ff87" }}></div>
                         <span style={{ fontSize: 10, color: "#8b949e", textTransform: "uppercase", fontWeight: 700 }}>Promotion Zone</span>
@@ -1131,7 +1078,7 @@ export default function App() {
                       <div style={{ fontSize: 28 }}>{player.avatar_emoji}</div>
                       <div style={{ fontFamily: "Barlow Condensed", fontWeight: 700, fontSize: 14, color: player.id === user?.id ? "#00ff87" : "#fff", textAlign: "center", maxWidth: 90, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{player.username}</div>
                       <div style={{ fontFamily: "Barlow Condensed", fontWeight: 900, fontSize: 22, color: colors[i] }}>{player.total_points}<span style={{ fontSize: 12 }}>pts</span></div>
-                      <div style={{ width: "100%", height: heights[i], display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start", paddingTop: 14, background: `linear-gradient(180deg, ${colors[i]}22 0%, #161b22 100%)`, border: `1px solid ${colors[i]}44`, borderBottom: "none", borderRadius: "12px 12px 0 0" }}>
+                      <div style={{ width: "100%", height: heights[i], display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start", paddingTop: 14, background: `linear-gradient(180deg, ${colors[i]}22 0%, #111 100%)`, border: `1px solid ${colors[i]}44`, borderBottom: "none", borderRadius: "12px 12px 0 0" }}>
                         <span style={{ fontSize: 28 }}>{medals[i]}</span>
                         <span style={{ fontFamily: "Barlow Condensed", fontWeight: 800, fontSize: 18, color: colors[i] }}>#{ranks[i]}</span>
                       </div>
@@ -1153,8 +1100,8 @@ export default function App() {
               const isTop3 = player.rank <= 3;
               const rankColors = { 1: "#ec7a26", 2: "#e6edf3", 3: "#cd7f32" };
               return (
-                <div key={player.id} className="leaderboard-row" style={{ display: "grid", gridTemplateColumns: "40px 1fr 60px 70px 70px", gap: 8, alignItems: "center", padding: "12px 16px", borderRadius: 12, marginBottom: 6, background: isMe ? "linear-gradient(135deg, #0d2a1a, #0a1e14)" : isTop3 ? "linear-gradient(135deg, #161b22, #0d1117)" : "#0a1420", border: isMe ? "1px solid #1a5a2a" : isTop3 ? `1px solid ${rankColors[player.rank]}33` : "1px solid #111e30", boxShadow: isMe ? "0 0 16px #00ff8710" : "none" }}>
-                  <div style={{ width: 32, height: 32, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Barlow Condensed", fontSize: isTop3 ? 18 : 14, fontWeight: 800, background: player.rank === 1 ? "linear-gradient(135deg, #ec7a26, #c05b11)" : player.rank === 2 ? "#30363d" : player.rank === 3 ? "linear-gradient(135deg, #a0522d, #7a3b1e)" : "transparent", color: isTop3 ? "#fff" : "#484f58", border: isTop3 ? "none" : "1px solid #30363d" }}>
+                <div key={player.id} className="leaderboard-row" style={{ display: "grid", gridTemplateColumns: "40px 1fr 60px 70px 70px", gap: 8, alignItems: "center", padding: "12px 16px", borderRadius: 12, marginBottom: 6, background: isMe ? "rgba(4, 132, 77, 0.15)" : isTop3 ? "#111" : "transparent", border: isMe ? "1px solid #04844d" : isTop3 ? `1px solid ${rankColors[player.rank]}33` : "1px solid #222", boxShadow: isMe ? "0 0 16px rgba(4, 132, 77, 0.2)" : "none" }}>
+                  <div style={{ width: 32, height: 32, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Barlow Condensed", fontSize: isTop3 ? 18 : 14, fontWeight: 800, background: player.rank === 1 ? "linear-gradient(135deg, #ec7a26, #c05b11)" : player.rank === 2 ? "#333" : player.rank === 3 ? "linear-gradient(135deg, #a0522d, #7a3b1e)" : "transparent", color: isTop3 ? "#fff" : "#9CA3AF", border: isTop3 ? "none" : "1px solid #333" }}>
                     {player.rank <= 3 ? ["🥇", "🥈", "🥉"][player.rank - 1] : player.rank}
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
@@ -1187,7 +1134,7 @@ export default function App() {
               { pts: 1, label: "Correct Outcome", desc: "Right result (Win / Draw / Loss)", example: "Predict 2-1 → Result 1-0", color: "#87ceeb" },
               { pts: 0, label: "Incorrect", desc: "Wrong outcome", example: "Predict 1-0 → Result 0-1", color: "#ff6b6b" },
             ].map(item => (
-              <div key={item.pts} style={{ display: "flex", gap: 16, alignItems: "flex-start", background: "#161b22", border: "1px solid #30363d", borderRadius: 12, padding: "16px 20px", marginBottom: 12 }}>
+              <div key={item.pts} style={{ display: "flex", gap: 16, alignItems: "flex-start", background: "#111", border: "1px solid #222", borderRadius: 12, padding: "16px 20px", marginBottom: 12 }}>
                 <div style={{ fontFamily: "Barlow Condensed", fontWeight: 800, fontSize: 28, color: item.color, minWidth: 48, textAlign: "center", lineHeight: 1 }}>
                   {item.pts}<span style={{ fontSize: 14 }}>pts</span>
                 </div>
