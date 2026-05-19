@@ -110,12 +110,12 @@ async function fetchAndProcessMatches() {
 // CRON SCHEDULE
 // ==========================================
 // Run this script automatically in the background
-// Currently set to run every 15 minutes: '*/15 * * * *'
-// (Adjust depending on how many API requests your free tier allows)
+// Currently set to run every 30 minutes: '*/30 * * * *'
+// This uses 48 requests per day (well under the 100 limit free tier)
 
 console.log("🤖 Auto-Updater started. Waiting for next schedule to run...");
 
-cron.schedule('*/15 * * * *', () => {
+cron.schedule('*/30 * * * *', () => {
     fetchAndProcessMatches();
 });
 
