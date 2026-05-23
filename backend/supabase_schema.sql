@@ -28,12 +28,25 @@ create table public.profiles (
 -- Auto-create profile when user signs up
 create or replace function public.handle_new_user()
 returns trigger as $$
+declare
+  v_username text;
+  v_base_username text;
+  v_counter int := 0;
 begin
+  v_base_username := split_part(new.email, '@', 1);
+  v_username := v_base_username;
+  
+  -- Resolve username conflicts dynamically
+  while exists (select 1 from public.profiles where username = v_username) loop
+    v_counter := v_counter + 1;
+    v_username := v_base_username || v_counter::text;
+  end loop;
+
   insert into public.profiles (id, email, username)
   values (
     new.id,
     new.email,
-    split_part(new.email, '@', 1)  -- default username from email
+    v_username
   );
   return new;
 end;
@@ -76,6 +89,21 @@ create table public.predictions (
   unique(user_id, match_id)            -- one prediction per user per match
 );
 
+-- Trigger to prevent predictions on locked matches
+create or replace function public.check_prediction_lock()
+returns trigger as $$
+begin
+  if (select is_locked from public.matches where id = new.match_id) = true then
+    raise exception 'Predictions are closed for this match.';
+  end if;
+  return new;
+end;
+$$ language plpgsql;
+
+create trigger tr_check_prediction_lock
+  before insert or update on public.predictions
+  for each row execute procedure public.check_prediction_lock();
+
 
 -- 4. LEADERBOARD VIEW (auto-calculated)
 create or replace view public.leaderboard as
@@ -92,22 +120,19 @@ where p.role != 'superAdmin'
 order by p.total_points desc;
 
 
--- 5. FUNCTION: Calculate & save points after result is entered
+-- 5. FUNCTION: Calculate & save points after result is entered (optimized set-based operations)
 create or replace function public.calculate_points(p_match_id int)
 returns void as $$
 declare
   v_home int;
   v_away int;
-  pred record;
-  pts int;
-  pred_outcome char;
-  real_outcome char;
-  pred_diff int;
   real_diff int;
+  real_outcome char;
 begin
-  -- Get match result (bypassing SELECT INTO which confuses the parser)
-  v_home := (select result_home from public.matches where id = p_match_id);
-  v_away := (select result_away from public.matches where id = p_match_id);
+  -- Get match result
+  select result_home, result_away into v_home, v_away 
+  from public.matches 
+  where id = p_match_id;
 
   if v_home is null or v_away is null then
     raise exception 'Match result not set yet';
@@ -120,71 +145,72 @@ begin
   else real_outcome := 'D';
   end if;
 
-  -- Loop through all predictions for this match
-  for pred in select * from public.predictions where match_id = p_match_id loop
-    pred_diff := pred.predicted_home - pred.predicted_away;
-    if pred_diff > 0 then pred_outcome := 'H';
-    elsif pred_diff < 0 then pred_outcome := 'A';
-    else pred_outcome := 'D';
-    end if;
+  -- 1. Bulk Update Predictions (Set-Based scoring)
+  update public.predictions
+  set points_earned = case
+    -- Exact Score (5 points)
+    when predicted_home = v_home and predicted_away = v_away then 5
+    -- Correct Goal Difference (3 points)
+    when (predicted_home - predicted_away > 0 and real_outcome = 'H' and (predicted_home - predicted_away) = real_diff) or
+         (predicted_home - predicted_away < 0 and real_outcome = 'A' and (predicted_home - predicted_away) = real_diff) or
+         (predicted_home - predicted_away = 0 and real_outcome = 'D' and (predicted_home - predicted_away) = real_diff) then 3
+    -- Correct Outcome Only (1 point)
+    when (predicted_home - predicted_away > 0 and real_outcome = 'H') or
+         (predicted_home - predicted_away < 0 and real_outcome = 'A') or
+         (predicted_home - predicted_away = 0 and real_outcome = 'D') then 1
+    else 0
+  end
+  where match_id = p_match_id;
 
-    -- Scoring logic
-    if pred.predicted_home = v_home and pred.predicted_away = v_away then
-      pts := 5;  -- Exact score
-    elsif pred_outcome = real_outcome and pred_diff = real_diff then
-      pts := 3;  -- Correct goal difference
-    elsif pred_outcome = real_outcome then
-      pts := 1;  -- Correct outcome only
-    else
-      pts := 0;
-    end if;
-
-    -- Save points on prediction
-    update public.predictions
-    set points_earned = pts
-    where id = pred.id;
-
-    -- Update user profile totals
-    update public.profiles
-    set
-      total_points = total_points + pts,
-      exact_scores = exact_scores + case when pts = 5 then 1 else 0 end,
-      correct_outcomes = correct_outcomes + case when pts >= 1 then 1 else 0 end
-    where id = pred.user_id;
-  end loop;
+  -- 2. Bulk Update Profiles in a single join query
+  update public.profiles p
+  set
+    total_points = p.total_points + sub.points,
+    exact_scores = p.exact_scores + sub.is_exact,
+    correct_outcomes = p.correct_outcomes + sub.is_correct
+  from (
+    select 
+      user_id,
+      points_earned as points,
+      case when points_earned = 5 then 1 else 0 end as is_exact,
+      case when points_earned >= 1 then 1 else 0 end as is_correct
+    from public.predictions
+    where match_id = p_match_id
+  ) sub
+  where p.id = sub.user_id;
 end;
 $$ language plpgsql security definer;
 
--- 5b. FUNCTION: Undo points for a match
+-- 5b. FUNCTION: Undo points for a match (optimized set-based operations)
 create or replace function public.undo_points(p_match_id int)
 returns void as $$
-declare
-  pred record;
-  pts int;
 begin
-  -- Loop through all predictions for this match where points were awarded
-  for pred in select * from public.predictions where match_id = p_match_id and points_earned is not null loop
-    pts := pred.points_earned;
+  -- 1. Update profiles in bulk by subtracting points earned from predictions of this match
+  update public.profiles p
+  set
+    total_points = p.total_points - sub.points,
+    exact_scores = p.exact_scores - sub.is_exact,
+    correct_outcomes = p.correct_outcomes - sub.is_correct
+  from (
+    select 
+      user_id,
+      points_earned as points,
+      case when points_earned = 5 then 1 else 0 end as is_exact,
+      case when points_earned >= 1 then 1 else 0 end as is_correct
+    from public.predictions
+    where match_id = p_match_id and points_earned is not null
+  ) sub
+  where p.id = sub.user_id;
 
-    -- Update user profile totals by subtracting the points they earned
-    update public.profiles
-    set
-      total_points = total_points - pts,
-      exact_scores = exact_scores - case when pts = 5 then 1 else 0 end,
-      correct_outcomes = correct_outcomes - case when pts >= 1 then 1 else 0 end
-    where id = pred.user_id;
+  -- 2. Reset points on predictions
+  update public.predictions
+  set points_earned = null
+  where match_id = p_match_id;
 
-    -- Reset the points on the prediction
-    update public.predictions
-    set points_earned = null
-    where id = pred.id;
-  end loop;
-
-  -- Reset the match result back to null
+  -- 3. Reset match result back to null
   update public.matches
   set result_home = null, result_away = null
   where id = p_match_id;
-
 end;
 $$ language plpgsql security definer;
 
@@ -236,6 +262,7 @@ create policy "SuperAdmins can update matches" on public.matches for update usin
 create policy "Predictions are viewable" on public.predictions for select using (true);
 create policy "Users can insert own predictions" on public.predictions for insert with check (auth.uid() = user_id);
 create policy "Users can update own predictions" on public.predictions for update using (auth.uid() = user_id);
+create policy "SuperAdmins can delete any prediction" on public.predictions for delete using (public.is_super_admin());
 
 
 -- ============================================
@@ -329,3 +356,10 @@ insert into public.matches (home_team, away_team, home_flag, away_flag, match_da
 ('France', 'Iraq', '🇫🇷', '🇮🇶', '2026-06-23', '21:00', 'I', 'Philadelphia Stadium'),
 ('Norway', 'Senegal', '🇳🇴', '🇸🇳', '2026-06-24', '00:00', 'I', 'New York/New Jersey Stadium'),
 ('Algeria', 'Jordan', '🇩🇿', '🇯🇴', '2026-06-24', '03:00', 'J', 'Seattle Stadium');
+
+-- ============================================
+-- 7. INDEXES FOR PERFORMANCE
+-- ============================================
+create index if not exists idx_predictions_match_id on public.predictions(match_id);
+create index if not exists idx_predictions_user_id on public.predictions(user_id);
+create index if not exists idx_profiles_total_points on public.profiles(total_points desc);

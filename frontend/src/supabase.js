@@ -176,18 +176,28 @@ export async function getLeaderboard(limit = 50) {
   return data;
 }
 
+// Simple debounce helper to prevent query storms during batch updates
+function debounce(func, wait) {
+  let timeout;
+  return function (...args) {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func.apply(this, args), wait);
+  };
+}
+
 // Real-time leaderboard subscription
 export function subscribeToLeaderboard(callback) {
+  const debouncedFetch = debounce(() => {
+    getLeaderboard().then(callback);
+  }, 2000); // Wait for 2 seconds of inactivity before querying
+
   return supabase
     .channel('leaderboard-changes')
     .on('postgres_changes', {
       event: 'UPDATE',
       schema: 'public',
       table: 'profiles'
-    }, () => {
-      // Re-fetch leaderboard on any profile update
-      getLeaderboard().then(callback);
-    })
+    }, debouncedFetch)
     .subscribe();
 }
 
@@ -274,5 +284,23 @@ export async function calculateMatchPoints(matchId) {
 
 export async function undoMatchPoints(matchId) {
   const { error } = await supabase.rpc('undo_points', { p_match_id: matchId });
+  if (error) throw error;
+}
+
+export async function deleteAdminPrediction(predictionId) {
+  const { error } = await supabase
+    .from('predictions')
+    .delete()
+    .eq('id', predictionId);
+
+  if (error) throw error;
+}
+
+export async function deleteAllAdminPredictions(userId) {
+  const { error } = await supabase
+    .from('predictions')
+    .delete()
+    .eq('user_id', userId);
+
   if (error) throw error;
 }

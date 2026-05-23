@@ -23,6 +23,8 @@ import {
   updateMatchResult,
   calculateMatchPoints,
   undoMatchPoints,
+  deleteAdminPrediction,
+  deleteAllAdminPredictions,
 } from "./supabase";
 
 // ─── Admin Dashboard Component ──────────────
@@ -32,6 +34,10 @@ function AdminDashboard({ user }) {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState("matches");
+  const [selectedUserPredictions, setSelectedUserPredictions] = useState(null);
+  const [selectedUsername, setSelectedUsername] = useState("");
+  const [selectedUserId, setSelectedUserId] = useState(null);
+  const [loadingPredictions, setLoadingPredictions] = useState(false);
 
   useEffect(() => { loadData(); }, []);
 
@@ -93,6 +99,40 @@ function AdminDashboard({ user }) {
     if (!window.confirm(`Permanently delete ${user.username}?`)) return;
     try { await deleteAdminUser(user.id); loadData(); }
     catch (err) { alert(err.message); }
+  };
+
+  const handleViewPredictions = async (u) => {
+    setSelectedUsername(u.username);
+    setSelectedUserId(u.id);
+    setLoadingPredictions(true);
+    try {
+      const preds = await getUserPredictions(u.id);
+      setSelectedUserPredictions(preds);
+    } catch (err) {
+      alert("Error loading predictions: " + err.message);
+    } finally {
+      setLoadingPredictions(false);
+    }
+  };
+
+  const handleClearPrediction = async (predId) => {
+    if (!window.confirm("Clear this prediction?")) return;
+    try {
+      await deleteAdminPrediction(predId);
+      setSelectedUserPredictions(prev => prev.filter(p => p.id !== predId));
+    } catch (err) {
+      alert("Error clearing prediction: " + err.message);
+    }
+  };
+
+  const handleClearAllPredictions = async () => {
+    if (!window.confirm(`Clear ALL predictions for ${selectedUsername}? This cannot be undone.`)) return;
+    try {
+      await deleteAllAdminPredictions(selectedUserId);
+      setSelectedUserPredictions([]);
+    } catch (err) {
+      alert("Error clearing predictions: " + err.message);
+    }
   };
 
   const filteredUsers = users.filter(u =>
@@ -157,9 +197,13 @@ function AdminDashboard({ user }) {
                     </td>
                     <td style={{ padding: "12px" }}>
                       {u.id === user?.id ? (
-                        <div style={{ textAlign: "right", color: "#8b949e", fontSize: 12, fontStyle: "italic", paddingRight: 8 }}>You (Admin)</div>
+                        <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end", alignItems: "center" }}>
+                          <span style={{ color: "#8b949e", fontSize: 12, fontStyle: "italic" }}>You</span>
+                          <button onClick={() => handleViewPredictions(u)} style={{ padding: "6px 10px", background: "#04844d", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer", fontSize: 12, fontWeight: "bold" }}>View Picks</button>
+                        </div>
                       ) : (
                         <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+                          <button onClick={() => handleViewPredictions(u)} style={{ padding: "6px 10px", background: "#04844d", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer", fontSize: 12, fontWeight: "bold" }}>View Picks</button>
                           <button onClick={() => handleUpdatePoints(u)} style={{ padding: "6px 10px", background: "#484f58", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer", fontSize: 12, fontWeight: "bold" }}>Edit Pts</button>
                           <button onClick={() => handleToggleStatus(u)} style={{ padding: "6px 10px", background: u.status === "active" ? "#ff6b6b" : "#00ff87", color: "#0b0f14", border: "none", borderRadius: "4px", cursor: "pointer", fontSize: 12, fontWeight: "bold" }}>{u.status === "active" ? "Deactivate" : "Activate"}</button>
                           <button onClick={() => handleDelete(u)} style={{ padding: "6px 10px", background: "#ff0000", color: "#fff", border: "none", borderRadius: "4px", cursor: "pointer", fontSize: 12, fontWeight: "bold" }}>Delete</button>
@@ -202,6 +246,187 @@ function AdminDashboard({ user }) {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* View Predictions Modal */}
+      {(selectedUserPredictions !== null || loadingPredictions) && (
+        <div style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(0, 0, 0, 0.85)",
+          backdropFilter: "blur(8px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 10000,
+          padding: 20
+        }}>
+          <div style={{
+            background: "#161b22",
+            border: "1px solid #ec7a26",
+            borderRadius: 16,
+            maxWidth: 650,
+            width: "100%",
+            maxHeight: "85vh",
+            display: "flex",
+            flexDirection: "column",
+            boxShadow: "0 10px 30px rgba(0,0,0,0.5)"
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "20px 24px",
+              borderBottom: "1px solid #30363d"
+            }}>
+              <h3 style={{
+                fontFamily: "Barlow Condensed",
+                fontSize: 24,
+                color: "#ec7a26",
+                margin: 0
+              }}>
+                🔮 Predictions for {selectedUsername}
+              </h3>
+              <button
+                onClick={() => { setSelectedUserPredictions(null); setSelectedUsername(""); setSelectedUserId(null); }}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "#8b949e",
+                  fontSize: 24,
+                  cursor: "pointer",
+                  lineHeight: 1
+                }}
+                onMouseOver={e => e.currentTarget.style.color = "#fff"}
+                onMouseOut={e => e.currentTarget.style.color = "#8b949e"}
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Clear All Button */}
+            {!loadingPredictions && selectedUserPredictions && selectedUserPredictions.length > 0 && (
+              <div style={{ padding: "0 24px" }}>
+                <button
+                  onClick={handleClearAllPredictions}
+                  style={{
+                    width: "100%",
+                    padding: "10px",
+                    background: "#2a0d0d",
+                    border: "1px solid #5a1a1a",
+                    borderRadius: 8,
+                    color: "#ff6b6b",
+                    fontFamily: "Barlow Condensed",
+                    fontSize: 14,
+                    fontWeight: 800,
+                    letterSpacing: 1,
+                    cursor: "pointer",
+                    transition: "background 0.2s"
+                  }}
+                  onMouseOver={e => e.currentTarget.style.background = "#3d1111"}
+                  onMouseOut={e => e.currentTarget.style.background = "#2a0d0d"}
+                >
+                  🗑️ CLEAR ALL PREDICTIONS ({selectedUserPredictions.length})
+                </button>
+              </div>
+            )}
+
+            {/* Modal Content */}
+            <div style={{
+              padding: "20px 24px",
+              overflowY: "auto",
+              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              gap: 12
+            }}>
+              {loadingPredictions && (
+                <div style={{ color: "#e6edf3", textAlign: "center", padding: 20 }}>
+                  Loading user predictions...
+                </div>
+              )}
+
+              {!loadingPredictions && selectedUserPredictions && selectedUserPredictions.length === 0 && (
+                <div style={{ color: "#8b949e", textAlign: "center", padding: 20 }}>
+                  No predictions submitted yet by this user.
+                </div>
+              )}
+
+              {!loadingPredictions && selectedUserPredictions && selectedUserPredictions.map(pred => {
+                const match = pred.matches || {};
+                const points = pred.points_earned;
+                
+                let ptsColor = "#8b949e";
+                let ptsText = "";
+                if (points !== null && points !== undefined) {
+                  if (points === 5) { ptsColor = "#00ff87"; ptsText = "+5 pts (Exact Score)"; }
+                  else if (points === 3) { ptsColor = "#ffd700"; ptsText = "+3 pts (Goal Diff)"; }
+                  else if (points === 1) { ptsColor = "#87ceeb"; ptsText = "+1 pt (Outcome)"; }
+                  else { ptsColor = "#ff6b6b"; ptsText = "0 pts (Incorrect)"; }
+                } else {
+                  ptsText = "Pending result";
+                }
+
+                return (
+                  <div key={pred.id} style={{
+                    background: "#0d1117",
+                    border: "1px solid #30363d",
+                    borderRadius: 10,
+                    padding: 16,
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: 12
+                  }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 11, color: "#8b949e", fontWeight: "bold", textTransform: "uppercase", marginBottom: 4 }}>
+                        Stage: {match.stage === "group" ? `Group ${match.group_name}` : match.stage}
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 15, fontWeight: "bold" }}>
+                        <span>{match.home_flag} {match.home_team}</span>
+                        <span style={{ color: "#ec7a26" }}>
+                          {match.result_home !== null && match.result_away !== null 
+                            ? `(${match.result_home} - ${match.result_away})` 
+                            : "(TBD)"}
+                        </span>
+                        <span>vs</span>
+                        <span>{match.away_team} {match.away_flag}</span>
+                      </div>
+                    </div>
+
+                    <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+                      <div style={{ fontFamily: "Barlow Condensed", fontSize: 18, fontWeight: "bold" }}>
+                        Prediction: <span style={{ color: "#ec7a26" }}>{pred.predicted_home} - {pred.predicted_away}</span>
+                      </div>
+                      <div style={{ fontSize: 12, color: ptsColor, fontWeight: "bold" }}>
+                        {ptsText}
+                      </div>
+                      <button
+                        onClick={() => handleClearPrediction(pred.id)}
+                        style={{
+                          padding: "4px 10px",
+                          background: "transparent",
+                          border: "1px solid #5a1a1a",
+                          borderRadius: 4,
+                          color: "#ff6b6b",
+                          fontSize: 11,
+                          fontWeight: "bold",
+                          cursor: "pointer",
+                          transition: "background 0.2s"
+                        }}
+                        onMouseOver={e => e.currentTarget.style.background = "#2a0d0d"}
+                        onMouseOut={e => e.currentTarget.style.background = "transparent"}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       )}
     </div>
